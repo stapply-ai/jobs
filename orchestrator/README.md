@@ -14,13 +14,29 @@ The orchestrator coordinates the entire workflow:
 
 ## Quick Start
 
-### Run Full Pipeline
+### Default Behavior
+
+By default, the pipeline runs: **Scraping → CSV Consolidation → Export**
+
+Discovery and DB Processing are **skipped by default**.
 
 ```bash
-# All steps on all platforms with SearXNG discovery (FREE unlimited!)
+# Default: scraping + CSV consolidation + export
+python orchestrator/pipeline.py
+
+# Same as above, specific platforms
+python orchestrator/pipeline.py --platforms ashby,greenhouse
+```
+
+### Run Full Pipeline
+
+To include discovery and DB processing, use `--all`:
+
+```bash
+# All 5 steps including discovery and DB processing
 python orchestrator/pipeline.py --all
 
-# All steps with specific platforms
+# Full pipeline with specific platforms
 python orchestrator/pipeline.py --all --platforms ashby,greenhouse
 ```
 
@@ -30,27 +46,21 @@ python orchestrator/pipeline.py --all --platforms ashby,greenhouse
 # Discovery only
 python orchestrator/pipeline.py --discovery-only --discovery-method searxng --max-queries 30
 
-# Scraping only (skip discovery, use existing companies)
+# Scraping only
 python orchestrator/pipeline.py --scraping-only
 
-# Scraping + CSV consolidation (no discovery, no DB)
-python orchestrator/pipeline.py --skip-discovery --skip-db-processing --skip-export
+# Scraping + CSV only (skip export)
+python orchestrator/pipeline.py --skip-export
 ```
 
 ### Skip Steps
 
 ```bash
-# Skip discovery (use existing company lists)
-python orchestrator/pipeline.py --skip-discovery
-
-# Skip CSV consolidation
+# Skip CSV consolidation (scraping + export only)
 python orchestrator/pipeline.py --skip-csv
 
-# Skip database processing
-python orchestrator/pipeline.py --skip-db-processing
-
-# Skip discovery and DB processing (scraping + CSV only)
-python orchestrator/pipeline.py --skip-discovery --skip-db-processing
+# Scraping only (skip CSV and export)
+python orchestrator/pipeline.py --skip-csv --skip-export
 ```
 
 ## Pipeline Steps
@@ -173,8 +183,8 @@ python orchestrator/pipeline.py --discovery-only --discovery-method searxng --ma
 #### Daily Job Scraping
 
 ```bash
-# Scrape jobs + create consolidated CSV (skip discovery)
-python orchestrator/pipeline.py --skip-discovery --skip-db-processing
+# Default: Scrape jobs + create consolidated CSV (discovery and DB are skipped by default)
+python orchestrator/pipeline.py
 
 # Result:
 # - Fresh job data in {platform}/companies/*.json
@@ -203,8 +213,8 @@ python orchestrator/pipeline.py --discovery-only --discovery-method searxng --ma
 # Week 2: Google CSE (FREE 100/day)
 python orchestrator/pipeline.py --discovery-only --discovery-method google --max-queries 100
 
-# Weekly: Scrape all companies + CSV
-python orchestrator/pipeline.py --skip-discovery
+# Daily: Scrape all companies + CSV (default behavior)
+python orchestrator/pipeline.py
 ```
 
 ## Configuration
@@ -290,23 +300,23 @@ python orchestrator/pipeline.py --help
 ## Examples Summary
 
 ```bash
-# 1. Full pipeline (all steps, all platforms)
+# 1. Default: scraping + CSV + export (most common use case)
+python orchestrator/pipeline.py
+
+# 2. Full pipeline including discovery and DB processing
 python orchestrator/pipeline.py --all
 
-# 2. Discovery only with SearXNG
+# 3. Discovery only with SearXNG
 python orchestrator/pipeline.py --discovery-only --discovery-method searxng --max-queries 30
 
-# 3. Scraping + CSV (skip discovery and DB)
-python orchestrator/pipeline.py --skip-discovery --skip-db-processing
+# 4. Default for specific platforms
+python orchestrator/pipeline.py --platforms ashby,greenhouse
 
-# 4. Full pipeline for Ashby only
+# 5. Full pipeline for Ashby only
 python orchestrator/pipeline.py --all --platforms ashby
 
-# 5. Discovery with Google CSE (free tier)
+# 6. Discovery with Google CSE (free tier)
 python orchestrator/pipeline.py --discovery-only --discovery-method google --max-queries 100
-
-# 6. Scraping specific platforms
-python orchestrator/pipeline.py --scraping-only --platforms ashby,greenhouse
 
 # 7. CSV consolidation only
 python orchestrator/consolidate_jobs.py --platforms all --output my_jobs.csv

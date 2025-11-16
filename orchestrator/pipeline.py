@@ -460,24 +460,24 @@ def parse_platforms(platform_str: str) -> List[Platform]:
 def main():
     """Main entry point for CLI"""
     parser = argparse.ArgumentParser(
-        description="Job Data Aggregation Pipeline Orchestrator",
+        description="Job Data Aggregation Pipeline Orchestrator\n\nDefault behavior: Runs scraping + CSV consolidation + export (skips discovery and DB processing)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run full pipeline on all platforms with SearXNG discovery
+  # Default: scraping + CSV consolidation + export (no discovery, no DB)
+  python orchestrator/pipeline.py
+
+  # Run full pipeline including discovery and DB processing
   python orchestrator/pipeline.py --all
 
-  # Run only scraping for specific platforms
-  python orchestrator/pipeline.py --platforms ashby,greenhouse --skip-discovery --skip-processing --skip-export
-
-  # Run discovery only with Firecrawl
+  # Run only discovery with Firecrawl
   python orchestrator/pipeline.py --discovery-only --discovery-method firecrawl --max-queries 20
 
-  # Run scraping and processing, skip discovery (use existing companies)
-  python orchestrator/pipeline.py --skip-discovery --platforms ashby
+  # Scraping + CSV only (skip export)
+  python orchestrator/pipeline.py --skip-export
 
-  # Full pipeline with optimized SERP discovery
-  python orchestrator/pipeline.py --all --discovery-method optimized --max-queries 10
+  # Full pipeline for specific platforms with optimized SERP discovery
+  python orchestrator/pipeline.py --all --platforms ashby,greenhouse --discovery-method optimized --max-queries 10
         """,
     )
 
@@ -493,7 +493,7 @@ Examples:
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Run all steps on all platforms (default discovery: searxng)",
+        help="Run all steps including discovery and DB processing (default discovery: searxng)",
     )
 
     parser.add_argument(
@@ -595,16 +595,13 @@ Examples:
     elif args.scraping_only:
         config.steps = [PipelineStep.SCRAPING]
     else:
-        # Default: all steps, but respect skip flags
+        # Default: scraping + CSV + export (skip discovery and DB processing)
+        # Use --all to run all steps including discovery and DB processing
         config.steps = []
-        if not args.skip_discovery:
-            config.steps.append(PipelineStep.DISCOVERY)
         if not args.skip_scraping:
             config.steps.append(PipelineStep.SCRAPING)
         if not args.skip_csv:
             config.steps.append(PipelineStep.CSV_CONSOLIDATION)
-        if not args.skip_db_processing:
-            config.steps.append(PipelineStep.DB_PROCESSING)
         if not args.skip_export:
             config.steps.append(PipelineStep.EXPORT)
 

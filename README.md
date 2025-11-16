@@ -60,14 +60,16 @@ BING_API_KEY=your_bing_key        # Bing (FREE 1,000/mo)
 
 **NEW!** Unified pipeline to run the full workflow with configurable steps.
 
+**Default behavior:** Scraping + CSV Consolidation + Export (skips discovery and DB processing)
+
 ### Quick Start
 
 ```bash
-# Run full pipeline (all steps on all platforms)
-python orchestrator/pipeline.py --all
+# Default: scraping + CSV consolidation (most common use case)
+python orchestrator/pipeline.py
 
-# Scraping + CSV only (skip discovery and database)
-python orchestrator/pipeline.py --skip-discovery --skip-db-processing
+# Run full pipeline including discovery and DB processing
+python orchestrator/pipeline.py --all
 
 # Discovery only with SearXNG (FREE unlimited!)
 python orchestrator/pipeline.py --discovery-only --discovery-method searxng --max-queries 30
