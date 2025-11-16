@@ -60,26 +60,72 @@ PLATFORMS = {
 
 # Search query strategies
 SEARCH_STRATEGIES = [
-    # Basic searches
+    # Basic site search
     lambda domain: f"site:{domain}",
+
+    # Job-related searches
     lambda domain: f"site:{domain} careers",
     lambda domain: f"site:{domain} jobs",
     lambda domain: f"site:{domain} hiring",
-    # Role-based
+    lambda domain: f"site:{domain} \"we're hiring\"",
+    lambda domain: f"site:{domain} apply now",
+
+    # Role-based searches (helps find niche companies)
     lambda domain: f"site:{domain} software engineer",
     lambda domain: f"site:{domain} product manager",
+    lambda domain: f"site:{domain} data scientist",
     lambda domain: f"site:{domain} designer",
+    lambda domain: f"site:{domain} sales",
+    lambda domain: f"site:{domain} marketing",
+    lambda domain: f"site:{domain} \"engineering\"",
+    lambda domain: f"site:{domain} \"product\"",
+    lambda domain: f"site:{domain} \"data\"",
+    lambda domain: f"site:{domain} \"design\"",
+    lambda domain: f"site:{domain} \"sales\"",
+    lambda domain: f"site:{domain} \"marketing\"",
+
+    # Remote/location searches
     lambda domain: f"site:{domain} remote",
-    # Location-based (top cities)
-    lambda domain: f"site:{domain} San Francisco",
-    lambda domain: f"site:{domain} New York",
-    lambda domain: f"site:{domain} London",
-    lambda domain: f"site:{domain} Berlin",
-    lambda domain: f"site:{domain} Singapore",
-    lambda domain: f"site:{domain} Bangalore",
-    # Company type
+    lambda domain: f"site:{domain} \"San Francisco\"",
+    lambda domain: f"site:{domain} \"New York\"",
+    lambda domain: f"site:{domain} \"London\"",
+    lambda domain: f"site:{domain} \"Paris\"",
+    lambda domain: f"site:{domain} \"Berlin\"",
+    lambda domain: f"site:{domain} \"Amsterdam\"",
+    lambda domain: f"site:{domain} \"Stockholm\"",
+    lambda domain: f"site:{domain} \"Warsaw\"",
+    lambda domain: f"site:{domain} \"Brussels\"",
+    lambda domain: f"site:{domain} \"Zurich\"",
+    lambda domain: f"site:{domain} \"Delhi\"",
+    lambda domain: f"site:{domain} \"Mumbai\"",
+    lambda domain: f"site:{domain} \"Bangalore\"",
+    lambda domain: f"site:{domain} \"Chennai\"",
+    lambda domain: f"site:{domain} \"Hyderabad\"",
+    lambda domain: f"site:{domain} \"Pune\"",
+    lambda domain: f"site:{domain} \"Kolkata\"",
+    lambda domain: f"site:{domain} \"Jaipur\"",
+    lambda domain: f"site:{domain} \"Singapore\"",
+    lambda domain: f"site:{domain} \"Dubai\"",
+    lambda domain: f"site:{domain} \"Tokyo\"",
+    lambda domain: f"site:{domain} \"Seoul\"",
+    lambda domain: f"site:{domain} \"Hong Kong\"",
+    lambda domain: f"site:{domain} \"Toronto\"",
+    lambda domain: f"site:{domain} \"Montreal\"",
+    lambda domain: f"site:{domain} \"Vancouver\"",
+    lambda domain: f"site:{domain} \"Sydney\"",
+
+    lambda domain: f"site:{domain} \"Europe\"",
+    lambda domain: f"site:{domain} \"Asia\"",
+    lambda domain: f"site:{domain} \"Middle East\"",
+    lambda domain: f"site:{domain} \"North America\"",
+    lambda domain: f"site:{domain} \"South America\"",
+
+    # Company type searches
     lambda domain: f"site:{domain} startup",
-    lambda domain: f"site:{domain} YC",
+    lambda domain: f"site:{domain} YC OR \"Y Combinator\"",
+    lambda domain: f"site:{domain} series A OR series B",
+    lambda domain: f"site:{domain} \"tech startup\"",
+    lambda domain: f"site:{domain} \"tech company\"",
 ]
 
 
@@ -188,7 +234,7 @@ def discover_platform(
 
     Args:
         platform_name: Platform to discover
-        max_queries: Maximum search queries to use (default: 20)
+        max_queries: Maximum search queries to use (default: unlimited)
         pages_per_query: Pages per query (default: 3)
         engines: Search engines to use (default: google,duckduckgo,bing)
     """
@@ -240,15 +286,15 @@ def discover_platform(
     total_results_fetched = 0
 
     # Use search strategies
-    strategies_to_use = SEARCH_STRATEGIES[:max_queries]
+    strategies_to_use = SEARCH_STRATEGIES if max_queries == -1 else SEARCH_STRATEGIES[:max_queries]
 
     for strategy_idx, strategy_func in enumerate(strategies_to_use, 1):
-        if queries_used >= max_queries:
-            print(f"\n⚠️  Reached query limit ({max_queries})")
+        if max_queries != -1 and queries_used >= max_queries:
+            print(f"\n⚠️  Reached query limit ({max_queries if max_queries != -1 else 'unlimited'})")
             break
 
         query = strategy_func(config["domains"][0])
-        print(f"\n[Query {queries_used + 1}/{max_queries}] {query}")
+        print(f"\n[Query {queries_used + 1}/{max_queries if max_queries != -1 else 'unlimited'}] {query}")
 
         query_urls = set()
 
@@ -316,7 +362,7 @@ def discover_platform(
 
 
 def discover_all_platforms(
-    max_queries_per_platform: int = 20,
+    max_queries_per_platform: int = -1,
     pages_per_query: int = 3,
     engines: str = "bing,brave,startpage,google",
 ):
@@ -362,11 +408,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max-queries",
         type=int,
-        default=20,
-        help="Maximum queries to use (default: 20, unlimited!)",
+        default=-1,
+        help="Maximum queries to use (default: unlimited!)",
     )
     parser.add_argument(
-        "--pages", type=int, default=3, help="Pages per query (default: 3)"
+        "--pages", type=int, default=10, help="Pages per query (default: 10)"
     )
     parser.add_argument(
         "--engines",
