@@ -1,6 +1,6 @@
 # Stapply Job Data Aggregator
 
-A data aggregator that collects job postings from multiple ATS (Applicant Tracking System) platforms.
+A data aggregator that collects job postings from multiple ATS (Applicant Tracking System) platforms and makes them publicly available.
 
 ## Data
 
@@ -8,24 +8,311 @@ The aggregated job data is available at: **https://storage.stapply.ai/jobs.csv**
 
 ## Supported Platforms
 
-- **Ashby** - Job postings from companies using Ashby ATS
-- **Greenhouse** - Job postings from companies using Greenhouse ATS
-- **Lever** - Job postings from companies using Lever ATS
-- **Workable** - Job postings from companies using Workable ATS
-- **Rippling** - Job postings from companies using Rippling ATS
+- **Ashby** - 816 companies tracked
+- **Greenhouse** - 310 companies tracked
+- **Lever** - 444 companies tracked
+- **Workable** - 218 companies tracked
+- **Rippling** - Coming soon
+
+**Total: 1,788 companies** across all platforms
+
+## Quick Start
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/stapply-ai/data.git
+cd data
+
+# Install dependencies using uv (recommended)
+uv sync
+
+# Or using pip
+pip install -r requirements.txt
+```
+
+### Environment Setup
+
+Create a `.env` file with your API keys:
+
+```bash
+cp env.example .env
+```
+
+Then edit `.env` with your keys:
+
+```env
+# Required for job processing and embeddings
+DATABASE_URL=postgresql://user:pass@host:port/dbname
+OPENAI_API_KEY=sk-...
+
+# Required for company discovery
+SERPAPI_API_KEY=your_serpapi_key
+
+# Optional: Free alternatives for company discovery
+GOOGLE_API_KEY=your_google_api_key
+GOOGLE_CSE_ID=your_custom_search_engine_id
+BING_API_KEY=your_bing_api_key
+```
+
+## Company Discovery
+
+Find more companies using different ATS platforms.
+
+### Option 1: Enhanced Discovery (Recommended)
+
+Uses 55+ search strategies to find the most companies:
+
+```bash
+# Discover all platforms (uses SERPAPI_API_KEY)
+python enhanced_discovery.py --platform all --pages 10 --strategies 10
+
+# Discover specific platform
+python enhanced_discovery.py --platform ashby --pages 15 --strategies 20
+
+# Deep discovery (expensive but comprehensive)
+python enhanced_discovery.py --platform greenhouse --pages 20 --strategies 55
+```
+
+**Search Strategies Include:**
+- Basic site searches
+- Job-related keywords (careers, hiring, jobs)
+- Role-based (software engineer, product manager, data scientist, designer, sales, marketing)
+- Location-based (50+ global cities: SF, NYC, London, Paris, Berlin, Bangalore, Singapore, Tokyo, etc.)
+- Region-based (Europe, Asia, Middle East, North America, South America)
+- Company type (startup, YC, series A/B, tech startup)
+
+### Option 2: Google Custom Search (FREE - 100/day)
+
+Use Google's free tier API (3,000 queries/month):
+
+```bash
+# Setup: See SERP_ALTERNATIVES.md for Google API setup (5 minutes)
+
+# Discover using free tier
+python google_custom_search.py --platform all --max-queries 100
+
+# Daily discovery (100 free queries per day)
+python google_custom_search.py --platform ashby --max-queries 100
+```
+
+**Cost:** FREE for first 100 queries/day, then $5 per 1,000 queries
+
+### Option 3: Optimized Discovery (Minimal Cost)
+
+Minimize SERP API costs with query caching and smart strategies:
+
+```bash
+# Uses only top 5 strategies with caching
+python optimized_serp_discovery.py --platform all --max-queries 25
+
+# Check cache stats
+python optimized_serp_discovery.py --cache-stats
+```
+
+**Features:**
+- SQLite query caching (avoid duplicate API calls)
+- Top 5 most effective strategies only
+- 75% cost reduction vs enhanced discovery
+
+### Manual Discovery
+
+Find companies from curated sources (FREE):
+
+**Sources:**
+- [Y Combinator Companies](https://www.ycombinator.com/companies) - 4,000+ startups
+- [BuiltIn Jobs](https://builtin.com/jobs) - 50,000+ tech jobs
+- [Wellfound](https://wellfound.com/jobs) - Startup jobs
+- [AngelList](https://angel.co/jobs) - Tech startup jobs
+
+**Method:**
+1. Visit company's careers page
+2. View page source (Ctrl+U / Cmd+U)
+3. Search for ATS domains:
+   - `ashbyhq.com` → Add to `ashby/companies.csv`
+   - `greenhouse.io` → Add to `greenhouse/greenhouse_companies.csv`
+   - `lever.co` → Add to `lever/lever_companies.csv`
+   - `workable.com` → Add to `workable/workable_companies.csv`
+
+## Job Scraping
+
+Scrape job postings from discovered companies:
+
+```bash
+# Ashby (includes database processing with embeddings)
+cd ashby
+python main.py
+python process_ashby.py  # Process to database with OpenAI embeddings
+
+# Greenhouse
+cd greenhouse
+python main.py
+
+# Lever
+cd lever
+python main.py
+
+# Workable
+cd workable
+python main.py
+```
 
 ## Project Structure
 
 ```
 data/
-├── ashby/          # Ashby scraper and data
-├── greenhouse/     # Greenhouse scraper and data
-├── lever/          # Lever scraper and data
-├── workable/       # Workable scraper and data
-├── rippling/        # Rippling scraper and data
-└── models/         # Data models for each platform
+├── ashby/                          # Ashby platform (816 companies)
+│   ├── main.py                    # Job scraper
+│   ├── process_ashby.py           # Database processor with embeddings
+│   ├── serp.py                    # Company discovery
+│   ├── extract_companies_ashby.py # Company extraction
+│   └── companies.csv              # Company list
+├── greenhouse/                     # Greenhouse platform (310 companies)
+│   ├── main.py                    # Job scraper
+│   ├── serp.py                    # Company discovery
+│   └── greenhouse_companies.csv   # Company list
+├── lever/                          # Lever platform (444 companies)
+│   ├── main.py                    # Job scraper
+│   ├── serp.py                    # Company discovery
+│   └── lever_companies.csv        # Company list
+├── workable/                       # Workable platform (218 companies)
+│   ├── main.py                    # Job scraper
+│   ├── serp.py                    # Company discovery
+│   └── workable_companies.csv     # Company list
+├── rippling/                       # Rippling platform (coming soon)
+│   └── rippling.txt               # URL collection
+├── models/                         # Pydantic data models
+│   ├── db.py                      # Database models
+│   ├── ashby.py                   # Ashby API models
+│   ├── gh.py                      # Greenhouse models
+│   ├── lever.py                   # Lever models
+│   └── workable.py                # Workable models
+├── enhanced_discovery.py           # 55+ search strategies (recommended)
+├── google_custom_search.py         # Free Google API discovery
+├── optimized_serp_discovery.py     # Cost-optimized SERP discovery
+└── alternative_discovery.py        # Alternative discovery methods
 ```
+
+## Documentation
+
+- **[DISCOVERY_QUICK_START.md](DISCOVERY_QUICK_START.md)** - Quick reference for company discovery
+- **[SERP_ALTERNATIVES.md](SERP_ALTERNATIVES.md)** - Comparison of SERP API providers and costs
+- **[IMPROVEMENTS.md](IMPROVEMENTS.md)** - Code quality improvements and recommendations
+
+## Discovery Cost Comparison
+
+| Method | Cost | Companies Found | Setup Time |
+|--------|------|----------------|------------|
+| **Enhanced Discovery** | $5-20/run | 500-2,000 | 0 min |
+| **Google Custom Search** | FREE (100/day) | 500-1,000 | 5 min |
+| **Optimized Discovery** | $2-5/run | 500-1,000 | 0 min |
+| **Manual Curation** | FREE | 500-1,000 | 30-60 min |
+
+### Recommended Workflow (Cost-Effective)
+
+**Week 1:** Enhanced discovery with limited strategies
+```bash
+python enhanced_discovery.py --platform all --pages 10 --strategies 10
+# Cost: ~$4, Result: +500-1,000 companies
+```
+
+**Week 2:** Google Custom Search (FREE)
+```bash
+python google_custom_search.py --platform all --max-queries 100
+# Cost: $0, Result: +300-500 companies
+```
+
+**Week 3:** Manual curation (30 mins)
+```
+Visit YC directory, BuiltIn, etc.
+# Cost: $0, Result: +200-500 companies
+```
+
+**Monthly total: 1,000-2,000 new companies at $4-8/month**
+
+## Features
+
+- **Multi-platform support** - Scrape jobs from 5 different ATS platforms
+- **Semantic search** - OpenAI embeddings for job title and description (Ashby)
+- **Incremental processing** - Checkpoint system prevents duplicate processing
+- **Job lifecycle tracking** - Automatically detect and mark inactive jobs
+- **Public data export** - Jobs published to public CSV endpoint
+- **Cost-optimized discovery** - Multiple discovery methods from FREE to paid
+
+## Tech Stack
+
+- **Python 3.12+**
+- **aiohttp** - Async HTTP client for concurrent scraping
+- **Pydantic** - Data validation and modeling
+- **SQLAlchemy** - Database ORM
+- **PostgreSQL** - Data storage
+- **OpenAI API** - Text embeddings for semantic search
+- **SERP API / Google Custom Search** - Company discovery
+- **pandas** - Data processing
+- **BeautifulSoup** - HTML parsing (if needed)
+
+## Environment Variables
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `DATABASE_URL` | For job processing | PostgreSQL connection string |
+| `OPENAI_API_KEY` | For embeddings | OpenAI API key for semantic search |
+| `SERPAPI_API_KEY` | For discovery | SerpAPI key for company discovery |
+| `GOOGLE_API_KEY` | Optional | Google Custom Search API (FREE tier) |
+| `GOOGLE_CSE_ID` | Optional | Custom Search Engine ID |
+| `BING_API_KEY` | Optional | Bing Search API (FREE tier) |
+
+## API Endpoints
+
+**Public Jobs CSV:** https://storage.stapply.ai/jobs.csv
+
+This CSV contains all aggregated job postings with:
+- Job title, description, location
+- Company name and ATS platform
+- Salary range (if available)
+- Remote/hybrid/onsite status
+- Post date and update timestamps
+- Semantic embeddings (for search)
 
 ## Contributing
 
+We welcome contributions! Here's how you can help:
+
+### Add More Companies
+
+1. Find companies using ATS platforms
+2. Add URLs to the appropriate CSV:
+   - `ashby/companies.csv`
+   - `greenhouse/greenhouse_companies.csv`
+   - `lever/lever_companies.csv`
+   - `workable/workable_companies.csv`
+3. Submit a pull request
+
+### Improve Discovery Scripts
+
+- Add new search strategies to `enhanced_discovery.py`
+- Improve cost optimization in `optimized_serp_discovery.py`
+- Add new free discovery sources
+
+### Add New ATS Platforms
+
+- Create scraper in new platform directory
+- Add Pydantic models in `models/`
+- Add platform to discovery scripts
+- Update documentation
+
+## License
+
 Please feel free to make requests to improve or add more companies. Contributions are welcome!
+
+## Support
+
+For issues, questions, or suggestions:
+- Open an issue on GitHub
+- Submit a pull request
+- Contact: https://stapply.ai
+
+---
+
+**Current Status:** Actively maintained | 1,788 companies tracked | Updated daily

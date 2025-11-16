@@ -2,35 +2,38 @@
 
 ## TL;DR - What to Run Right Now
 
-### Option 1: COMPLETELY FREE (Recommended!) 🌟
+### Option 1: Enhanced Discovery (Recommended) 🌟
 ```bash
-# Step 1: Sitemap discovery (finds 2,000-5,000 companies)
-python sitemap_discovery.py --platform all
-# Cost: $0, Time: 5-10 minutes
-
-# Step 2: Manual curation (finds 500-1,000 companies)
-# Visit https://www.ycombinator.com/companies
-# Check each company's /careers page for ATS platform
-# Add to CSV files
-# Cost: $0, Time: 30-60 minutes
-
-# Total: 2,500-6,000 companies at $0 cost!
+# Uses 55+ search strategies to find the most companies
+python enhanced_discovery.py --platform all --pages 10 --strategies 10
+# Cost: ~$4 (SERPAPI_API_KEY required), Time: 15 minutes
+# Finds: 500-1,000 companies
 ```
 
-### Option 2: FREE API Tiers (No credit card needed)
+### Option 2: FREE API Tier (No cost!)
 ```bash
 # Google Custom Search (100/day = 3,000/month FREE)
+# Setup: See SERP_ALTERNATIVES.md for Google API setup (5 minutes)
 python google_custom_search.py --platform all --max-queries 100
 # Cost: $0, Time: 10 minutes
 # Finds: 500-1,000 companies
 ```
 
-### Option 3: Optimized Paid SERP (Minimal cost)
+### Option 3: Optimized Discovery (Minimal cost)
 ```bash
-# Only use if you already have SerpAPI account
+# Uses query caching and top 5 strategies
 python optimized_serp_discovery.py --platform all --max-queries 25
 # Cost: ~$2.50 (25 queries × 4 platforms × $0.01)
 # Time: 15 minutes
+# Finds: 500-1,000 companies
+```
+
+### Option 4: Manual Curation (FREE, time-intensive)
+```bash
+# Visit company directories and check careers pages
+# Y Combinator: https://www.ycombinator.com/companies
+# BuiltIn: https://builtin.com/jobs
+# Cost: $0, Time: 30-60 minutes
 # Finds: 500-1,000 companies
 ```
 
@@ -40,25 +43,24 @@ python optimized_serp_discovery.py --platform all --max-queries 25
 
 | Method | Cost | Time | Companies | Setup | Recurring |
 |--------|------|------|-----------|-------|-----------|
-| **Sitemap Parsing** | $0 | 10 min | 2,000-5,000 | None | Run weekly |
+| **Enhanced Discovery** | $4-10 | 15 min | 500-1,000 | SERPAPI key | Weekly |
+| **Google Custom Search** | $0 | 15 min | 500-1,000 | Google API | Daily (100/day limit) |
+| **Optimized SerpAPI** | $2-5 | 15 min | 500-1,000 | SERPAPI key | As needed |
 | **Manual YC Curation** | $0 | 1 hour | 500-1,000 | None | Monthly |
-| **Google Custom Search** | $0 | 15 min | 500-1,000 | API key | Daily (100/day limit) |
-| **Bing Search API** | $0 | 15 min | 300-500 | API key | Monthly (1K limit) |
-| **Optimized SerpAPI** | $2-5 | 15 min | 500-1,000 | API key | As needed |
-| **Enhanced SerpAPI** | $10-20 | 30 min | 2,000-4,000 | API key | As needed |
+| **Bing Search API** | $0 | 15 min | 300-500 | Bing API | Monthly (1K limit) |
 
 ---
 
 ## Which Script Should I Use?
 
-### Use `sitemap_discovery.py` when:
-- ✅ You want FREE, unlimited discovery
-- ✅ You want the MOST companies per time invested
-- ✅ You don't have API keys set up
-- ✅ You're just getting started
-- ✅ You want automated discovery
+### Use `enhanced_discovery.py` when:
+- ✅ You want the MOST companies with automated search
+- ✅ You have SERPAPI_API_KEY set up
+- ✅ You want 55+ different search strategies
+- ✅ Budget is not a major concern ($4-10 per run)
+- ✅ You want comprehensive global coverage
 
-**Best for:** First-time discovery, getting 90% of results with zero cost
+**Best for:** Maximum automated discovery, global company coverage
 
 ### Use `google_custom_search.py` when:
 - ✅ You want FREE API-based discovery
@@ -76,13 +78,12 @@ python optimized_serp_discovery.py --platform all --max-queries 25
 
 **Best for:** Paid discovery with cost optimization
 
-### Use `enhanced_discovery.py` when:
-- ✅ You have generous SerpAPI budget
-- ✅ You want maximum coverage
-- ✅ Cost is not a concern
-- ✅ You need 17 different search strategies
+### Don't use `sitemap_discovery.py`:
+- ❌ Sitemap-based discovery doesn't work reliably for ATS platforms
+- ❌ Most ATS platforms don't expose comprehensive sitemaps
+- ❌ Use enhanced_discovery.py or google_custom_search.py instead
 
-**Best for:** Maximum discovery (expensive but comprehensive)
+**Note:** While included in the codebase, sitemap discovery is not recommended
 
 ### Use `alternative_discovery.py` when:
 - ✅ You want guidance on manual methods
@@ -95,17 +96,17 @@ python optimized_serp_discovery.py --platform all --max-queries 25
 
 ## Recommended Workflow
 
-### Week 1: Initial Discovery (FREE)
+### Week 1: Initial Discovery
 ```bash
-# Day 1: Automated free discovery
-python sitemap_discovery.py --platform all
-# Expected: +2,000-5,000 companies
+# Day 1: Enhanced discovery (SERPAPI)
+python enhanced_discovery.py --platform all --pages 10 --strategies 10
+# Expected: +500-1,000 companies, Cost: ~$4
 
 # Day 2-3: Manual curation (1 hour)
 # Visit Y Combinator, BuiltIn, AngelList
-# Expected: +500-1,000 companies
+# Expected: +500-1,000 companies, Cost: $0
 
-# Total Week 1: 2,500-6,000 companies at $0
+# Total Week 1: 1,000-2,000 companies at ~$4
 ```
 
 ### Week 2: API-based Discovery (FREE)
@@ -155,12 +156,16 @@ python sitemap_discovery.py --platform all
 
 ## Setup Instructions
 
-### 1. Sitemap Discovery (No setup needed!)
+### 1. Enhanced Discovery (SERPAPI setup)
 ```bash
-python sitemap_discovery.py --platform all
+# Add to .env file
+echo "SERPAPI_API_KEY=your_key_here" >> .env
+
+# Run discovery
+python enhanced_discovery.py --platform all --pages 10 --strategies 10
 ```
 
-That's it! No API keys, no account, no cost.
+Get your SERPAPI key from: https://serpapi.com/ (100 free queries/month, then $50/mo for 5,000)
 
 ### 2. Google Custom Search API (5 min setup, FREE)
 

@@ -75,18 +75,7 @@ Total cost: $0-5/month
 
 ### Tier 1: FREE Methods (Use First!) 💰
 
-#### 1. **Sitemap Parsing** (Automated, Unlimited, Free)
-- Parse XML sitemaps from ATS platforms
-- Can find 1,000s of companies instantly
-- Zero API costs
-- See: `sitemap_discovery.py` (I'll create this)
-
-#### 2. **Robots.txt Parsing** (Automated, Unlimited, Free)
-- Some ATS platforms list companies in robots.txt
-- Quick and free
-- Works great for Greenhouse
-
-#### 3. **Manual Curation** (30 mins = 500+ companies, Free)
+#### 1. **Manual Curation** (30 mins = 500+ companies, Free)
 Sources:
 - Y Combinator directory: https://www.ycombinator.com/companies
 - BuiltIn: https://builtin.com/jobs
@@ -95,13 +84,13 @@ Sources:
 - RemoteOK: https://remoteok.com
 - LinkedIn job search (free browsing)
 
-#### 4. **CommonCrawl Dataset** (Billions of pages, Free)
+#### 2. **CommonCrawl Dataset** (Billions of pages, Free)
 - Public web crawl data
 - Can extract ATS URLs
 - Requires processing but zero cost
 - See: https://commoncrawl.org/
 
-#### 5. **GitHub Company Lists** (Curated, Free)
+#### 3. **GitHub Company Lists** (Curated, Free)
 Existing repos with company lists:
 - `remoteintech/remote-jobs`
 - `lukasz-madon/awesome-remote-job`
@@ -133,51 +122,57 @@ Existing repos with company lists:
 
 | Method | Companies Found | Cost | Time | Difficulty |
 |--------|----------------|------|------|------------|
-| **Sitemap Parsing** | 1,000-5,000 | $0 | 1 hour | Easy |
-| **Robots.txt** | 100-500 | $0 | 30 mins | Easy |
-| **Manual YC Curation** | 500-1,000 | $0 | 2 hours | Easy |
-| **Manual BuiltIn** | 500-2,000 | $0 | 3 hours | Medium |
+| **Enhanced Discovery (SERPAPI)** | 500-1,000 | $4-10 | 15 mins | Easy |
+| **Google Custom Search (Free)** | 500-1,000 | $0 | 15 mins | Medium |
+| **Optimized SERPAPI** | 500-1,000 | $2-5 | 15 mins | Easy |
+| **Manual YC Curation** | 500-1,000 | $0 | 1 hour | Easy |
+| **Manual BuiltIn** | 500-2,000 | $0 | 2 hours | Medium |
 | **GitHub Lists** | 200-500 | $0 | 1 hour | Easy |
-| **Google Custom Search (Free)** | 500-1,000 | $0 | 1 hour | Medium |
-| **Bing Search (Free)** | 300-500 | $0 | 1 hour | Medium |
+| **Bing Search (Free)** | 300-500 | $0 | 15 mins | Medium |
 | **CommonCrawl** | 5,000+ | $0 | 1 day | Hard |
-| **SerpAPI (Paid)** | Unlimited | $$$$ | Fast | Easy |
 
-**Total with FREE methods: 8,000-15,000 companies at $0 cost!**
+**Note:** Sitemap and robots.txt parsing don't work reliably for ATS platforms
+
+**Total with FREE methods: 1,500-4,000 companies at $0 cost!**
 
 ## Recommended Workflow (Zero Cost)
 
-### Month 1: Initial Discovery (FREE)
+### Month 1: Initial Discovery
 ```bash
-# Week 1: Automated free methods
-python sitemap_discovery.py --platform all        # 2,000-5,000 companies
-python robots_discovery.py --platform greenhouse  # 500+ companies
-python github_lists_importer.py                   # 500+ companies
+# Week 1: Enhanced discovery (SERPAPI)
+python enhanced_discovery.py --platform all --pages 10 --strategies 10
+# 500-1,000 companies, Cost: ~$4
 
 # Week 2: Manual curation (2 hours)
 # Visit YC directory, BuiltIn, AngelList
-# Manually add 500-1,000 companies
+# Manually add 500-1,000 companies, Cost: $0
 
 # Week 3: Free API tier
-python google_custom_search.py --platform all --daily-limit 100
-# 700 companies over 7 days (100/day)
+python google_custom_search.py --platform all --max-queries 100
+# 500-1,000 companies, Cost: $0
 
-# Week 4: Bing API
-python bing_search.py --platform all --limit 1000
-# 500-1,000 companies
+# Week 4: Optimized SERPAPI (minimal cost)
+python optimized_serp_discovery.py --platform all --max-queries 25
+# 500-1,000 companies, Cost: ~$2.50
 
-Total: 4,200-8,200 companies at $0 cost
+Total: 2,000-4,000 companies at ~$6.50 cost
 ```
 
-### Month 2+: Maintenance (FREE)
+### Month 2+: Maintenance
 ```bash
-# Monthly: Re-run sitemap discovery (new companies listed)
-python sitemap_discovery.py --platform all
+# Weekly: Optimized discovery with caching
+python optimized_serp_discovery.py --platform all --max-queries 25
+# Cost: ~$2.50/week (cached results reduce cost over time)
 
 # Weekly: Manual curation (30 mins)
 # Check new YC batch, trending on HN, ProductHunt
+# Cost: $0
 
-# As needed: Use free API quotas for specific searches
+# Daily: Use Google Custom Search free tier
+python google_custom_search.py --platform rotating --max-queries 100
+# Cost: $0
+
+Total monthly: ~$10-15
 ```
 
 ## How to Minimize SERP API Costs
@@ -298,24 +293,23 @@ python enhanced_discovery.py --platform greenhouse --pages 5 --strategies 5
 
 ## My Recommendation
 
-**Use this discovery strategy (all FREE):**
+**Use this discovery strategy (cost-effective):**
 
-1. **Primary Discovery (FREE, 8,000+ companies):**
-   - Sitemap parsing (automated)
-   - Robots.txt parsing (automated)
-   - Manual YC curation (2 hours/month)
-   - GitHub company lists import
-   - CommonCrawl processing (advanced)
+1. **Primary Discovery (Enhanced SERPAPI - $4-10/month):**
+   - Enhanced discovery with 55+ search strategies
+   - Automated, comprehensive, global coverage
+   - Best ROI for time vs. companies found
 
 2. **Secondary Discovery (FREE tier APIs):**
    - Google Custom Search (100/day free)
    - Bing Search (1,000/month free)
-   - SerpAPI (100/month free)
+   - SerpAPI free tier (100/month)
 
-3. **Tertiary (Paid, only if needed):**
-   - Only use if you need 15,000+ companies
-   - Use cheapest provider (ScraperAPI at $0.0005/query)
+3. **Manual Discovery (FREE, time-intensive):**
+   - Manual YC curation (1-2 hours/month)
+   - BuiltIn browsing
+   - GitHub company lists import
 
-**This gives you 10,000+ companies at $0/month cost!**
+**This gives you 1,500-3,000 companies at $4-15/month cost!**
 
-I'll now create the free discovery tools for you.
+**Note:** While sitemap/robots.txt methods are in the codebase, they don't work reliably for ATS platforms and are not recommended.
