@@ -33,29 +33,29 @@ PLATFORMS = {
         "domains": ["jobs.ashbyhq.com"],
         "pattern": r"(https://jobs\.ashbyhq\.com/[^/?#]+)",
         "csv_column": "ashby_url",
-        "output_file": "ashby/companies.csv"
+        "output_file": "ashby/companies.csv",
     },
     "greenhouse": {
         "domains": ["job-boards.greenhouse.io", "boards.greenhouse.io"],
         "pattern": r"(https://(?:job-boards|boards)\.greenhouse\.io/[^/?#]+)",
         "csv_column": "greenhouse_url",
-        "output_file": "greenhouse/greenhouse_companies.csv"
+        "output_file": "greenhouse/greenhouse_companies.csv",
     },
     "lever": {
         "domains": ["jobs.lever.co"],
         "pattern": r"(https://jobs\.lever\.co/[^/?#]+)",
         "csv_column": "lever_url",
-        "output_file": "lever/lever_companies.csv"
+        "output_file": "lever/lever_companies.csv",
     },
     "workable": {
         "domains": ["apply.workable.com", "jobs.workable.com"],
         "pattern": [
             r"(https://apply\.workable\.com/[^/?#]+)",
-            r"(https://jobs\.workable\.com/company/[^/?#]+/[^/?#]+)"
+            r"(https://jobs\.workable\.com/company/[^/?#]+/[^/?#]+)",
         ],
         "csv_column": "workable_url",
-        "output_file": "workable/workable_companies.csv"
-    }
+        "output_file": "workable/workable_companies.csv",
+    },
 }
 
 # Search query strategies
@@ -65,13 +65,11 @@ SEARCH_STRATEGIES = [
     lambda domain: f"site:{domain} careers",
     lambda domain: f"site:{domain} jobs",
     lambda domain: f"site:{domain} hiring",
-
     # Role-based
     lambda domain: f"site:{domain} software engineer",
     lambda domain: f"site:{domain} product manager",
     lambda domain: f"site:{domain} designer",
     lambda domain: f"site:{domain} remote",
-
     # Location-based (top cities)
     lambda domain: f"site:{domain} San Francisco",
     lambda domain: f"site:{domain} New York",
@@ -79,7 +77,6 @@ SEARCH_STRATEGIES = [
     lambda domain: f"site:{domain} Berlin",
     lambda domain: f"site:{domain} Singapore",
     lambda domain: f"site:{domain} Bangalore",
-
     # Company type
     lambda domain: f"site:{domain} startup",
     lambda domain: f"site:{domain} YC",
@@ -97,13 +94,17 @@ def read_existing_urls(csv_file: str, column_name: str) -> Set[str]:
                 print(f"📖 Found {len(existing_urls)} existing URLs in {csv_file}")
             elif "url" in df.columns:
                 existing_urls = set(df["url"].dropna().tolist())
-                print(f"📖 Found {len(existing_urls)} existing URLs in {csv_file} (legacy format)")
+                print(
+                    f"📖 Found {len(existing_urls)} existing URLs in {csv_file} (legacy format)"
+                )
         except Exception as e:
             print(f"⚠️  Error reading {csv_file}: {e}")
     return existing_urls
 
 
-def extract_urls_from_results(results: List[dict], pattern: str | List[str], domains: List[str]) -> Set[str]:
+def extract_urls_from_results(
+    results: List[dict], pattern: str | List[str], domains: List[str]
+) -> Set[str]:
     """Extract company URLs from SearXNG search results"""
     urls = set()
 
@@ -111,7 +112,7 @@ def extract_urls_from_results(results: List[dict], pattern: str | List[str], dom
         return urls
 
     for result in results:
-        url = result.get('url', '')
+        url = result.get("url", "")
 
         if not url:
             continue
@@ -136,7 +137,7 @@ def search_searxng(
     searxng_url: str,
     query: str,
     page: int = 1,
-    engines: str = "google,duckduckgo,bing"
+    engines: str = "bing,brave,startpage,google",
 ) -> List[dict]:
     """
     Perform search using SearXNG instance
@@ -153,12 +154,12 @@ def search_searxng(
     endpoint = f"{searxng_url.rstrip('/')}/search"
 
     params = {
-        'q': query,
-        'format': 'json',
-        'pageno': page,
-        'engines': engines,
-        'language': 'en',
-        'safesearch': 0,  # 0=off, 1=moderate, 2=strict
+        "q": query,
+        "format": "json",
+        "pageno": page,
+        "engines": engines,
+        "language": "en",
+        "safesearch": 0,  # 0=off, 1=moderate, 2=strict
     }
 
     try:
@@ -166,7 +167,7 @@ def search_searxng(
         response.raise_for_status()
 
         data = response.json()
-        return data.get('results', [])
+        return data.get("results", [])
 
     except requests.exceptions.RequestException as e:
         print(f"  ⚠️  Error querying SearXNG: {e}")
@@ -180,7 +181,7 @@ def discover_platform(
     platform_name: str,
     max_queries: int = 20,
     pages_per_query: int = 3,
-    engines: str = "google,duckduckgo,bing"
+    engines: str = "bing,brave,startpage,google",
 ):
     """
     Discover companies using SearXNG
@@ -263,12 +264,16 @@ def discover_platform(
                     break
 
                 # Extract URLs
-                page_urls = extract_urls_from_results(results, config["pattern"], config["domains"])
+                page_urls = extract_urls_from_results(
+                    results, config["pattern"], config["domains"]
+                )
 
                 new_in_page = page_urls - all_urls - query_urls
                 query_urls.update(page_urls)
 
-                print(f"  Page {page}: {len(results)} results, {len(page_urls)} relevant URLs (+{len(new_in_page)} new)")
+                print(
+                    f"  Page {page}: {len(results)} results, {len(page_urls)} relevant URLs (+{len(new_in_page)} new)"
+                )
 
                 # Small delay to be respectful
                 time.sleep(0.5)
@@ -281,7 +286,9 @@ def discover_platform(
         new_from_query = query_urls - all_urls
         all_urls.update(query_urls)
 
-        print(f"  Query total: +{len(new_from_query)} new URLs (cumulative: {len(all_urls)})")
+        print(
+            f"  Query total: +{len(new_from_query)} new URLs (cumulative: {len(all_urls)})"
+        )
 
     # Cost calculation (always $0 for self-hosted)
     print(f"\n📊 Discovery Summary:")
@@ -311,7 +318,7 @@ def discover_platform(
 def discover_all_platforms(
     max_queries_per_platform: int = 20,
     pages_per_query: int = 3,
-    engines: str = "google,duckduckgo,bing"
+    engines: str = "bing,brave,startpage,google",
 ):
     """Discover all platforms using SearXNG"""
 
@@ -329,7 +336,7 @@ def discover_all_platforms(
             platform_name,
             max_queries=max_queries_per_platform,
             pages_per_query=pages_per_query,
-            engines=engines
+            engines=engines,
         )
         print("=" * 80)
         time.sleep(2)
@@ -350,25 +357,22 @@ if __name__ == "__main__":
         "--platform",
         choices=list(PLATFORMS.keys()) + ["all"],
         default="all",
-        help="Platform to discover (default: all)"
+        help="Platform to discover (default: all)",
     )
     parser.add_argument(
         "--max-queries",
         type=int,
         default=20,
-        help="Maximum queries to use (default: 20, unlimited!)"
+        help="Maximum queries to use (default: 20, unlimited!)",
     )
     parser.add_argument(
-        "--pages",
-        type=int,
-        default=3,
-        help="Pages per query (default: 3)"
+        "--pages", type=int, default=3, help="Pages per query (default: 3)"
     )
     parser.add_argument(
         "--engines",
         type=str,
-        default="google,duckduckgo,bing",
-        help="Search engines to use (default: google,duckduckgo,bing)"
+        default="bing,brave,startpage,google",
+        help="Search engines to use (default: bing,brave,startpage,google)",
     )
 
     args = parser.parse_args()
@@ -377,12 +381,12 @@ if __name__ == "__main__":
         discover_all_platforms(
             max_queries_per_platform=args.max_queries,
             pages_per_query=args.pages,
-            engines=args.engines
+            engines=args.engines,
         )
     else:
         discover_platform(
             args.platform,
             max_queries=args.max_queries,
             pages_per_query=args.pages,
-            engines=args.engines
+            engines=args.engines,
         )
