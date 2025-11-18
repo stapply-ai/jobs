@@ -1,53 +1,66 @@
-import os
 import json
-import csv
+import sys
+from pathlib import Path
+
+from pydantic import ValidationError
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from export_utils import generate_job_id, write_jobs_csv  # noqa: E402
+from models.gh import GreenhouseJob  # noqa: E402
 
 
 def main():
-    companies_dir = os.path.join(os.path.dirname(__file__), "companies")
-    jobs_csv_path = os.path.join(os.path.dirname(__file__), "jobs.csv")
+    companies_dir = Path(__file__).resolve().parent / "companies"
+    jobs_csv_path = Path(__file__).resolve().parent / "jobs.csv"
 
     job_rows = []
 
-    if not os.path.exists(companies_dir) or not os.path.isdir(companies_dir):
+    if not companies_dir.exists() or not companies_dir.is_dir():
         print(f"Companies directory does not exist: {companies_dir}")
     else:
-        for filename in os.listdir(companies_dir):
-            if filename.endswith(".json"):
-                company_name = os.path.splitext(filename)[0]
-                json_path = os.path.join(companies_dir, filename)
-                with open(json_path, "r", encoding="utf-8") as f:
-                    try:
-                        data = json.load(f)
-                    except Exception:
-                        # skip files that are not valid JSON
-                        continue
+        for json_file in sorted(companies_dir.glob("*.json")):
+            company_name = json_file.stem
+            try:
+                with open(json_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except json.JSONDecodeError:
+                continue
 
-                    # Greenhouse structure: jobs are always under "jobs" key
-                    jobs = data.get("jobs", [])
-                    if not isinstance(jobs, list):
-                        continue
+            jobs = data.get("jobs", [])
+            if not isinstance(jobs, list):
+                continue
 
-                    for job in jobs:
-                        # Greenhouse uses absolute_url, not url or jobUrl
-                        url = job.get("absolute_url", "")
-                        title = job.get("title", "")
+            for job_data in jobs:
+                try:
+                    job = GreenhouseJob(**job_data)
+                except ValidationError:
+                    continue
 
-                        # Greenhouse location is a dict with "name" key
-                        location = job.get("location", {})
-                        if isinstance(location, dict):
-                            location_str = location.get("name", "")
-                        else:
-                            location_str = str(location)
+                location_obj = job.location
+                location_str = (
+                    location_obj.name if location_obj and location_obj.name else ""
+                )
+                url = job.absolute_url or ""
+                ats_id = str(job.id) if job.id is not None else ""
 
-                        job_rows.append([url, title, location_str, company_name])
+                job_rows.append(
+                    {
+                        "url": url,
+                        "title": job.title or "",
+                        "location": location_str,
+                        "company": company_name,
+                        "ats_id": ats_id,
+                        "id": generate_job_id("greenhouse", url, ats_id),
+                    }
+                )
 
     print(f"Processed {len(job_rows)} total jobs")
-
-    with open(jobs_csv_path, "w", encoding="utf-8", newline="") as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(["url", "title", "location", "company"])
-        writer.writerows(job_rows)
+    diff_path = write_jobs_csv(jobs_csv_path, job_rows)
+    if diff_path:
+        print(f"Created diff file: {diff_path.name}")
 
 
 if __name__ == "__main__":
