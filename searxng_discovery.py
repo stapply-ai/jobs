@@ -1,20 +1,18 @@
 """
 SearXNG-Based Company Discovery
-FREE self-hosted search alternative - NO API costs or limits!
+Self-hosted search alternative with no API limits.
 
 Advantages:
-- Completely FREE (self-hosted)
+- Self-hosted control
 - No API limits or rate limiting
 - No API keys needed
 - Privacy-focused
 - Aggregates results from multiple search engines
-- No usage tracking or costs
+- No usage tracking
 
 Requirements:
 - SearXNG instance running (see SEARXNG_SETUP.md)
 - SEARXNG_URL in .env pointing to your instance
-
-Pricing: $0 (self-hosted)
 """
 
 import requests
@@ -31,7 +29,7 @@ load_dotenv()
 PLATFORMS = {
     "rippling": {
         "domains": ["ats.rippling.com"],
-        "pattern": r"(https://ats\.rippling\.com/[^/?#]+)",
+        "pattern": r"(https://ats\.rippling\.com/[^/?#]+/jobs)",
         "csv_column": "rippling_url",
         "output_file": "rippling/rippling_companies.csv",
     },
@@ -130,17 +128,58 @@ SEARCH_STRATEGIES = [
 ]
 
 
-def read_existing_urls(csv_file: str, column_name: str) -> Set[str]:
+def normalize_url(url: str) -> str:
+    """Normalize URLs for case-insensitive comparisons"""
+    if not isinstance(url, str):
+        return ""
+    return url.strip().rstrip("/").lower()
+
+
+def standardize_rippling_url(url: str) -> str:
+    """Standardize Rippling URLs to always have /jobs format"""
+    if not isinstance(url, str):
+        return ""
+
+    url = url.strip().rstrip("/").lower()
+
+    # Match rippling URLs
+    rippling_pattern = r"^https://ats\.rippling\.com/([^/?#]+)(?:/jobs)?$"
+    match = re.match(rippling_pattern, url)
+
+    if match:
+        slug = match.group(1)
+        return f"https://ats.rippling.com/{slug}/jobs"
+
+    return url
+
+
+def read_existing_urls(
+    csv_file: str, column_name: str, platform_key: str = None
+) -> Set[str]:
     """Read existing URLs from CSV file"""
-    existing_urls = set()
+    existing_urls: Set[str] = set()
     if os.path.exists(csv_file):
         try:
             df = pd.read_csv(csv_file)
+            urls_to_process = []
             if column_name in df.columns:
-                existing_urls = set(df[column_name].dropna().tolist())
-                print(f"📖 Found {len(existing_urls)} existing URLs in {csv_file}")
+                urls_to_process = df[column_name].dropna().tolist()
             elif "url" in df.columns:
-                existing_urls = set(df["url"].dropna().tolist())
+                urls_to_process = df["url"].dropna().tolist()
+
+            # Standardize rippling URLs before normalization
+            if platform_key == "rippling":
+                urls_to_process = [
+                    standardize_rippling_url(url) for url in urls_to_process
+                ]
+
+            existing_urls = {
+                normalize_url(url) for url in urls_to_process if normalize_url(url)
+            }
+
+            if column_name in df.columns:
+                print(f"📖 Found {len(existing_urls)} existing URLs in {csv_file}")
+            else:
                 print(
                     f"📖 Found {len(existing_urls)} existing URLs in {csv_file} (legacy format)"
                 )
@@ -184,7 +223,7 @@ def search_searxng(
     searxng_url: str,
     query: str,
     page: int = 1,
-    engines: str = "bing,brave,startpage,google",
+    engines: str = "duckduckgo",
     max_retries: int = 3,
 ) -> List[dict]:
     """
@@ -233,7 +272,53 @@ def search_searxng(
 
             response.raise_for_status()
             data = response.json()
-            return data.get("results", [])
+
+            # Check for engine errors in the response
+            errors = data.get("errors", [])
+            if errors:
+                # Log first few errors for debugging
+                for error in errors[:3]:
+                    engine_name = error.get("engine", "unknown")
+                    error_msg = error.get("error", str(error))
+                    print(f"    ⚠️  Engine '{engine_name}' error: {error_msg}")
+
+            results = data.get("results", [])
+
+            # Debug logging: Show response details if no results
+            if not results:
+                number_of_results = data.get("number_of_results", 0)
+                infoboxes = data.get("infoboxes", [])
+                answers = data.get("answers", [])
+
+                # Show more detailed debug info for first failed query
+                if page == 1:
+                    print(f"    🔍 Debug: Response keys: {list(data.keys())}")
+                    print(
+                        f"    🔍 Debug: number_of_results={number_of_results}, errors={len(errors)}, infoboxes={len(infoboxes)}"
+                    )
+                    if number_of_results > 0:
+                        print(
+                            f"    ⚠️  SearXNG reports {number_of_results} total results but returned 0 in 'results' array"
+                        )
+                        # Check if results are in a different key
+                        for key in data.keys():
+                            if (
+                                "result" in key.lower()
+                                and isinstance(data[key], list)
+                                and len(data[key]) > 0
+                            ):
+                                print(
+                                    f"    💡 Found {len(data[key])} results in key '{key}' instead of 'results'"
+                                )
+                    elif errors:
+                        print("    ⚠️  All engines failed with errors (see above)")
+                    elif infoboxes or answers:
+                        print("    ℹ️  Got infobox/answer data but no search results")
+                    else:
+                        query_preview = query[:50] + "..." if len(query) > 50 else query
+                        print(f"    ℹ️  No results found for query: '{query_preview}'")
+
+            return results
 
         except requests.exceptions.RequestException as e:
             # For 429 errors, we already handled above, so this is for other HTTP errors
@@ -262,7 +347,7 @@ def discover_platform(
     platform_name: str,
     max_queries: int = 20,
     pages_per_query: int = 3,
-    engines: str = "bing,brave,startpage,google",
+    engines: str = "duckduckgo",
 ):
     """
     Discover companies using SearXNG
@@ -274,15 +359,17 @@ def discover_platform(
         engines: Search engines to use (default: google,duckduckgo,bing)
     """
 
-    if platform_name not in PLATFORMS:
+    platform_key = platform_name.lower()
+
+    if platform_key not in PLATFORMS:
         print(f"❌ Unknown platform: {platform_name}")
         print(f"Available platforms: {', '.join(PLATFORMS.keys())}")
         return
 
-    config = PLATFORMS[platform_name]
+    config = PLATFORMS[platform_key]
 
     print("=" * 80)
-    print(f"🔍 SearXNG Discovery: {platform_name.upper()}")
+    print(f"🔍 SearXNG Discovery: {platform_key.upper()}")
     print(f"📊 Max queries: {max_queries}")
     print(f"📊 Pages per query: {pages_per_query}")
     print(f"🔧 Engines: {engines}")
@@ -298,7 +385,6 @@ def discover_platform(
         print("   SEARXNG_URL=http://localhost:8080")
         print("\nOr use a public instance (if available):")
         print("   SEARXNG_URL=https://searx.be")
-        print("\n💰 Cost: $0 (self-hosted, no limits!)")
         return
 
     # Test SearXNG connection
@@ -327,9 +413,12 @@ def discover_platform(
     print(f"✅ Connected! Got {len(test_results)} test results")
 
     # Read existing URLs
-    existing_urls = read_existing_urls(config["output_file"], config["csv_column"])
+    existing_urls = read_existing_urls(
+        config["output_file"], config["csv_column"], platform_key
+    )
 
-    all_urls = set()
+    discovered_norms = set()
+    new_urls: Set[str] = set()
     queries_used = 0
     total_results_fetched = 0
 
@@ -350,7 +439,7 @@ def discover_platform(
             f"\n[Query {queries_used + 1}/{max_queries if max_queries != -1 else 'unlimited'}] {query}"
         )
 
-        query_urls = set()
+        query_norms = set()
 
         for page in range(1, pages_per_query + 1):
             try:
@@ -360,16 +449,57 @@ def discover_platform(
                 total_results_fetched += len(results)
 
                 if not results:
-                    print(f"  Page {page}: No results")
-                    break
+                    print(
+                        f"  Page {page}: No results (total results fetched: {len(results)})"
+                    )
+                    # Try with Bing as fallback if DuckDuckGo fails
+                    if page == 1 and engines == "duckduckgo":
+                        print(
+                            "    💡 DuckDuckGo returned no results, trying Bing as fallback..."
+                        )
+                        results = search_searxng(
+                            searxng_url, query, page=page, engines="bing"
+                        )
+                        if results:
+                            print(f"    ✅ Got {len(results)} results with Bing")
+                            total_results_fetched += len(results)
+                        else:
+                            print("    ⚠️  Bing also returned no results")
+                            break
+                    elif page == 1 and "," in engines:
+                        # Multiple engines failed, try just DuckDuckGo
+                        print("    💡 All engines failed, trying DuckDuckGo alone...")
+                        results = search_searxng(
+                            searxng_url, query, page=page, engines="duckduckgo"
+                        )
+                        if results:
+                            print(
+                                f"    ✅ Got {len(results)} results with DuckDuckGo alone"
+                            )
+                            total_results_fetched += len(results)
+                        else:
+                            break
+                    else:
+                        break
 
                 # Extract URLs
                 page_urls = extract_urls_from_results(
                     results, config["pattern"], config["domains"]
                 )
 
-                new_in_page = page_urls - all_urls - query_urls
-                query_urls.update(page_urls)
+                # Standardize rippling URLs to always have /jobs format
+                if platform_key == "rippling":
+                    page_urls = [standardize_rippling_url(url) for url in page_urls]
+
+                normalized_page_urls = {
+                    normalize_url(url) for url in page_urls if normalize_url(url)
+                }
+
+                new_in_page = normalized_page_urls - discovered_norms - query_norms
+                query_norms.update(normalized_page_urls)
+
+                new_candidates = normalized_page_urls - existing_urls - new_urls
+                new_urls.update(new_candidates)
 
                 print(
                     f"  Page {page}: {len(results)} results, {len(page_urls)} relevant URLs (+{len(new_in_page)} new)"
@@ -383,11 +513,11 @@ def discover_platform(
                 break
 
         queries_used += 1
-        new_from_query = query_urls - all_urls
-        all_urls.update(query_urls)
+        new_from_query = query_norms - discovered_norms
+        discovered_norms.update(query_norms)
 
         print(
-            f"  Query total: +{len(new_from_query)} new URLs (cumulative: {len(all_urls)})"
+            f"  Query total: +{len(new_from_query)} new URLs (cumulative: {len(discovered_norms)})"
         )
 
         # Delay between queries to avoid rate limiting
@@ -396,26 +526,43 @@ def discover_platform(
                 3.0
             )  # 3 seconds between queries to avoid "too many requests" errors
 
-    # Cost calculation (always $0 for self-hosted)
-    print(f"\n📊 Discovery Summary:")
+    print("\n📊 Discovery Summary:")
     print(f"  🔍 Queries used: {queries_used}")
     print(f"  📄 Total results fetched: {total_results_fetched}")
-    print(f"  💰 Cost: $0 (self-hosted, unlimited!)")
-    print(f"  🔍 Companies found: {len(all_urls)}")
-    print(f"  🆕 New companies: {len(all_urls - existing_urls)}")
+    new_count = len(new_urls)
+    print(f"  🔍 Companies found: {len(discovered_norms)}")
+    print(f"  🆕 New companies: {new_count}")
 
     # Save results
-    combined_urls = existing_urls.union(all_urls)
-    new_urls = all_urls - existing_urls
+    combined_urls = existing_urls.union(new_urls)
 
-    if new_urls:
-        print(f"\n🎉 Sample of new URLs (first 10):")
+    if new_count:
+        print("\n🎉 Sample of new URLs (first 10):")
+        # Normalized URLs are already in standardized format (standardized before normalization)
+        # They're just lowercase, which is fine for display
         for url in sorted(new_urls)[:10]:
             print(f"  ✨ {url}")
-        if len(new_urls) > 10:
-            print(f"  ... and {len(new_urls) - 10} more")
+        if new_count > 10:
+            print(f"  ... and {new_count - 10} more")
 
-    df = pd.DataFrame({config["csv_column"]: sorted(combined_urls)})
+    # Convert normalized URLs back to standardized format for rippling when saving
+    # Normalized URLs are lowercase strings, but already in standardized format (with /jobs)
+    # Just ensure they're all properly formatted
+    if platform_key == "rippling":
+        sorted_urls = []
+        for norm_url in sorted(combined_urls):
+            # norm_url is already normalized (lowercase, stripped) and standardized (has /jobs)
+            # Just ensure it's in the proper format
+            standardized = standardize_rippling_url(norm_url)
+            if standardized:  # Only add if standardization succeeded
+                sorted_urls.append(standardized)
+        sorted_urls = sorted(
+            set(sorted_urls)
+        )  # Remove duplicates after standardization
+    else:
+        sorted_urls = sorted(combined_urls)
+
+    df = pd.DataFrame({config["csv_column"]: sorted_urls})
     df.to_csv(config["output_file"], index=False)
 
     print(f"\n✅ Saved {len(df)} companies to {config['output_file']}")
@@ -424,7 +571,7 @@ def discover_platform(
 def discover_all_platforms(
     max_queries_per_platform: int = -1,
     pages_per_query: int = 3,
-    engines: str = "bing,brave,startpage,google",
+    engines: str = "duckduckgo",
 ):
     """Discover all platforms using SearXNG"""
 
@@ -433,7 +580,6 @@ def discover_all_platforms(
     print(f"📊 Queries per platform: {max_queries_per_platform}")
     print(f"📊 Pages per query: {pages_per_query}")
     print(f"🔧 Engines: {engines}")
-    print(f"💰 Cost: $0 (self-hosted, unlimited!)")
     print("=" * 80)
 
     for platform_name in PLATFORMS.keys():
@@ -449,7 +595,6 @@ def discover_all_platforms(
 
     print("\n" + "=" * 80)
     print("✅ All platforms discovered!")
-    print("💡 No API costs - run as often as you want!")
     print("=" * 80)
 
 
@@ -457,10 +602,11 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="SearXNG-based company discovery (FREE, self-hosted)"
+        description="SearXNG-based company discovery (self-hosted)"
     )
     parser.add_argument(
         "--platform",
+        type=str.lower,
         choices=list(PLATFORMS.keys()) + ["all"],
         default="all",
         help="Platform to discover (default: all)",
@@ -477,8 +623,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--engines",
         type=str,
-        default="bing,brave,startpage,google",
-        help="Search engines to use (default: bing,brave,startpage,google)",
+        default="duckduckgo",
+        help="Search engines to use (default: duckduckgo)",
     )
 
     args = parser.parse_args()
