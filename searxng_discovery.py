@@ -74,6 +74,24 @@ PLATFORMS = {
         "csv_column": "workable_url",
         "output_file": "workable/workable_companies.csv",
     },
+    "smartrecruiters": {
+        "domains": ["jobs.smartrecruiters.com"],
+        "pattern": r"(https://jobs\.smartrecruiters\.com/[^/?#]+)",
+        "csv_column": "smartrecruiters_url",
+        "output_file": "smartrecruiters/smartrecruiters_companies.csv",
+    },
+    "workday": {
+        "domains": ["myworkdayjobs.com"],
+        "pattern": r"(https://[^/?#]+\.myworkdayjobs\.com/[^/?#]+)",
+        "csv_column": "workday_url",
+        "output_file": "workday/workday_companies.csv",
+    },
+    "gem": {
+        "domains": ["jobs.gem.com"],
+        "pattern": r"(https://jobs\.gem\.com/[^/?#]+)",
+        "csv_column": "gem_url",
+        "output_file": "gem/gem_companies.csv",
+    },
 }
 
 SEARCH_STRATEGIES = [
@@ -255,6 +273,50 @@ def standardize_rippling_url(url: str) -> str:
     return url
 
 
+def standardize_gem_url(url: str) -> str:
+    """Standardize Gem URLs to extract just the company base URL"""
+    if not isinstance(url, str):
+        return ""
+
+    url = url.strip().rstrip("/").lower()
+
+    # Match Gem URLs - extract company slug only
+    # Matches both company pages (jobs.gem.com/company) and job pages (jobs.gem.com/company/job-id)
+    gem_pattern = r"^https://jobs\.gem\.com/([^/?#]+)"
+    match = re.match(gem_pattern, url)
+
+    if match:
+        company_slug = match.group(1)
+        return f"https://jobs.gem.com/{company_slug}"
+
+    return url
+
+
+def standardize_workday_url(url: str) -> str:
+    """Standardize Workday URLs to extract the company base URL"""
+    if not isinstance(url, str):
+        return ""
+
+    url = url.strip().rstrip("/").lower()
+
+    # Match Workday URLs - extract company and site name (before /job/ if present)
+    # Examples:
+    # - https://mastercard.wd1.myworkdayjobs.com/CorporateCareers/job/...
+    #   -> https://mastercard.wd1.myworkdayjobs.com/CorporateCareers
+    # - https://company.wd2.myworkdayjobs.com/JobSiteName
+    #   -> https://company.wd2.myworkdayjobs.com/JobSiteName
+    workday_pattern = r"^(https://[^/?#]+\.myworkdayjobs\.com/[^/?#]+)(?:/job/.*)?$"
+    match = re.match(workday_pattern, url)
+
+    if match:
+        # Extract the base URL (subdomain + first path segment)
+        base_url = match.group(1)
+        # Remove trailing slash if present
+        return base_url.rstrip("/")
+
+    return url
+
+
 def create_temp_copy(source_path: str) -> str | None:
     """
     Create a temporary copy of the given file in the same directory.
@@ -296,6 +358,45 @@ def write_dataframe_atomically(df: pd.DataFrame, target_path: str) -> None:
         raise
 
 
+def save_discovered_urls(
+    combined_urls: Set[str],
+    platform_key: str,
+    config: dict,
+) -> None:
+    """
+    Save discovered URLs to CSV file.
+    Called after each query to preserve progress.
+    """
+    # Convert normalized URLs back to standardized format for platforms that need it
+    if platform_key == "rippling":
+        sorted_urls = []
+        for norm_url in sorted(combined_urls):
+            standardized = standardize_rippling_url(norm_url)
+            if standardized:
+                sorted_urls.append(standardized)
+        sorted_urls = sorted(set(sorted_urls))
+    elif platform_key == "gem":
+        sorted_urls = []
+        for norm_url in sorted(combined_urls):
+            standardized = standardize_gem_url(norm_url)
+            if standardized:
+                sorted_urls.append(standardized)
+        sorted_urls = sorted(set(sorted_urls))
+    elif platform_key == "workday":
+        sorted_urls = []
+        for norm_url in sorted(combined_urls):
+            standardized = standardize_workday_url(norm_url)
+            if standardized:
+                sorted_urls.append(standardized)
+        sorted_urls = sorted(set(sorted_urls))
+    else:
+        sorted_urls = sorted(combined_urls)
+
+    df = pd.DataFrame({config["csv_column"]: sorted_urls})
+    write_dataframe_atomically(df, config["output_file"])
+    print(f"  💾 Saved {len(df)} companies to {config['output_file']}")
+
+
 def read_existing_urls(
     csv_file: str, column_name: str, platform_key: str = None
 ) -> Set[str]:
@@ -313,10 +414,16 @@ def read_existing_urls(
             elif "url" in df.columns:
                 urls_to_process = df["url"].dropna().tolist()
 
-            # Standardize rippling URLs before normalization
+            # Standardize platform URLs before normalization
             if platform_key == "rippling":
                 urls_to_process = [
                     standardize_rippling_url(url) for url in urls_to_process
+                ]
+            elif platform_key == "gem":
+                urls_to_process = [standardize_gem_url(url) for url in urls_to_process]
+            elif platform_key == "workday":
+                urls_to_process = [
+                    standardize_workday_url(url) for url in urls_to_process
                 ]
 
             existing_urls = {
@@ -633,9 +740,13 @@ def discover_platform(
                     results, config["pattern"], config["domains"]
                 )
 
-                # Standardize rippling URLs to always have /jobs format
+                # Standardize platform URLs
                 if platform_key == "rippling":
                     page_urls = [standardize_rippling_url(url) for url in page_urls]
+                elif platform_key == "gem":
+                    page_urls = [standardize_gem_url(url) for url in page_urls]
+                elif platform_key == "workday":
+                    page_urls = [standardize_workday_url(url) for url in page_urls]
 
                 normalized_page_urls = {
                     normalize_url(url) for url in page_urls if normalize_url(url)
@@ -667,6 +778,14 @@ def discover_platform(
             f"  Query total: +{len(new_from_query)} new URLs (cumulative: {len(discovered_norms)})"
         )
 
+        # Save progress after each query to preserve work if script is stopped
+        combined_urls = existing_urls.union(new_urls)
+        save_discovered_urls(combined_urls, platform_key, config)
+
+        # Update existing_urls to include newly discovered URLs for next iteration
+        # This ensures we don't duplicate work and the save reflects current state
+        existing_urls = combined_urls.copy()
+
         # Delay between queries to avoid rate limiting
         if strategy_idx < len(strategies_to_use) and query_cooldown > 0:
             time.sleep(query_cooldown)
@@ -678,7 +797,7 @@ def discover_platform(
     print(f"  🔍 Companies found: {len(discovered_norms)}")
     print(f"  🆕 New companies: {new_count}")
 
-    # Save results
+    # Final save (data is already saved after each query, but save once more to ensure consistency)
     combined_urls = existing_urls.union(new_urls)
 
     if new_count:
@@ -690,27 +809,11 @@ def discover_platform(
         if new_count > 10:
             print(f"  ... and {new_count - 10} more")
 
-    # Convert normalized URLs back to standardized format for rippling when saving
-    # Normalized URLs are lowercase strings, but already in standardized format (with /jobs)
-    # Just ensure they're all properly formatted
-    if platform_key == "rippling":
-        sorted_urls = []
-        for norm_url in sorted(combined_urls):
-            # norm_url is already normalized (lowercase, stripped) and standardized (has /jobs)
-            # Just ensure it's in the proper format
-            standardized = standardize_rippling_url(norm_url)
-            if standardized:  # Only add if standardization succeeded
-                sorted_urls.append(standardized)
-        sorted_urls = sorted(
-            set(sorted_urls)
-        )  # Remove duplicates after standardization
-    else:
-        sorted_urls = sorted(combined_urls)
-
-    df = pd.DataFrame({config["csv_column"]: sorted_urls})
-    write_dataframe_atomically(df, config["output_file"])
-
-    print(f"\n✅ Saved {len(df)} companies to {config['output_file']}")
+    # Final save using helper function
+    save_discovered_urls(combined_urls, platform_key, config)
+    print(
+        f"\n✅ Final save complete: {len(combined_urls)} total companies saved to {config['output_file']}"
+    )
 
 
 def discover_all_platforms(
