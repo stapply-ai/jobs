@@ -45,6 +45,54 @@ function normalizeLocation(location: string): string {
 }
 
 /**
+ * Collect unique, alphabetized values for a given job field
+ */
+function collectUniqueJobValues(
+    jobs: JobMarker[],
+    key: keyof Pick<JobMarker, 'company' | 'location' | 'title'>
+): string[] {
+    const seen = new Set<string>();
+
+    for (const job of jobs) {
+        const rawValue = job[key];
+        const value = typeof rawValue === 'string' ? rawValue.trim() : '';
+        if (value) {
+            seen.add(value);
+        }
+    }
+
+    return Array.from(seen).sort((a, b) => a.localeCompare(b));
+}
+
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+function normalizePagination(page?: number, pageSize?: number) {
+    const safePage = Math.max(1, Math.floor(page ?? 1));
+    const safeSize = Math.max(
+        1,
+        Math.min(MAX_PAGE_SIZE, Math.floor(pageSize ?? DEFAULT_PAGE_SIZE))
+    );
+    return { page: safePage, pageSize: safeSize };
+}
+
+function paginateValues(values: string[], page?: number, pageSize?: number) {
+    const { page: currentPage, pageSize: currentPageSize } = normalizePagination(page, pageSize);
+    const total = values.length;
+    const start = (currentPage - 1) * currentPageSize;
+    const paginated = values.slice(start, start + currentPageSize);
+    const totalPages = Math.max(1, Math.ceil(Math.max(1, total) / currentPageSize));
+
+    return {
+        set: paginated,
+        total,
+        page: currentPage,
+        pageSize: currentPageSize,
+        totalPages,
+    };
+}
+
+/**
  * Calculate appropriate zoom level based on geographic spread of jobs
  */
 function calculateAppropriateZoom(jobs: JobMarker[]): number {
@@ -341,6 +389,105 @@ export const mapControlFunctions = {
             },
         };
     },
+
+    /**
+     * List all available companies in the dataset
+     */
+    allAvailableCompanies: (
+        allJobs: JobMarker[],
+        page?: number,
+        pageSize?: number
+    ): {
+        success: boolean;
+        message: string;
+        set: string[];
+        total: number;
+        page: number;
+        pageSize: number;
+        totalPages: number;
+    } => {
+        const companies = collectUniqueJobValues(allJobs, 'company');
+        const pagination = paginateValues(companies, page, pageSize);
+        const { set, total, totalPages: availablePages } = pagination;
+
+        return {
+            success: true,
+            message: total
+                ? `Returning ${set.length} of ${total} companies`
+                : 'No companies available',
+            set,
+            total,
+            page: pagination.page,
+            pageSize: pagination.pageSize,
+            totalPages: availablePages,
+        };
+    },
+
+    /**
+     * List all available locations in the dataset
+     */
+    allAvailableLocations: (
+        allJobs: JobMarker[],
+        page?: number,
+        pageSize?: number
+    ): {
+        success: boolean;
+        message: string;
+        set: string[];
+        total: number;
+        page: number;
+        pageSize: number;
+        totalPages: number;
+    } => {
+        const locations = collectUniqueJobValues(allJobs, 'location');
+        const pagination = paginateValues(locations, page, pageSize);
+        const { set, total, totalPages: availablePages } = pagination;
+
+        return {
+            success: true,
+            message: total
+                ? `Returning ${set.length} of ${total} locations`
+                : 'No locations available',
+            set,
+            total,
+            page: pagination.page,
+            pageSize: pagination.pageSize,
+            totalPages: availablePages,
+        };
+    },
+
+    /**
+     * List all available titles in the dataset
+     */
+    allAvailableTitles: (
+        allJobs: JobMarker[],
+        page?: number,
+        pageSize?: number
+    ): {
+        success: boolean;
+        message: string;
+        set: string[];
+        total: number;
+        page: number;
+        pageSize: number;
+        totalPages: number;
+    } => {
+        const titles = collectUniqueJobValues(allJobs, 'title');
+        const pagination = paginateValues(titles, page, pageSize);
+        const { set, total, totalPages: availablePages } = pagination;
+
+        return {
+            success: true,
+            message: total
+                ? `Returning ${set.length} of ${total} titles`
+                : 'No titles available',
+            set,
+            total,
+            page: pagination.page,
+            pageSize: pagination.pageSize,
+            totalPages: availablePages,
+        };
+    },
 };
 
 /**
@@ -446,6 +593,60 @@ export const mapControlFunctionDefinitions = [
                 },
             },
             required: ['location'],
+        },
+    },
+    {
+        name: 'allAvailableCompanies',
+        description: 'Retrieve a sorted list of all distinct company names present in the dataset.',
+        parameters: {
+            type: 'object',
+            properties: {
+                page: {
+                    type: 'number',
+                    description: 'Page number (>=1). Defaults to 1.',
+                },
+                pageSize: {
+                    type: 'number',
+                    description: 'Page size (1-200). Defaults to 50.',
+                },
+            },
+            required: [],
+        },
+    },
+    {
+        name: 'allAvailableLocations',
+        description: 'Retrieve a sorted list of all distinct job locations present in the dataset.',
+        parameters: {
+            type: 'object',
+            properties: {
+                page: {
+                    type: 'number',
+                    description: 'Page number (>=1). Defaults to 1.',
+                },
+                pageSize: {
+                    type: 'number',
+                    description: 'Page size (1-200). Defaults to 50.',
+                },
+            },
+            required: [],
+        },
+    },
+    {
+        name: 'allAvailableTitles',
+        description: 'Retrieve a sorted list of all distinct job titles present in the dataset.',
+        parameters: {
+            type: 'object',
+            properties: {
+                page: {
+                    type: 'number',
+                    description: 'Page number (>=1). Defaults to 1.',
+                },
+                pageSize: {
+                    type: 'number',
+                    description: 'Page size (1-200). Defaults to 50.',
+                },
+            },
+            required: [],
         },
     },
 ];

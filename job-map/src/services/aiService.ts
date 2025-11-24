@@ -257,6 +257,30 @@ function executeFunctionCalls(
                     );
                     break;
 
+                case 'allAvailableCompanies':
+                    result = mapControlFunctions.allAvailableCompanies(
+                        allJobs,
+                        funcCall.arguments.page,
+                        funcCall.arguments.pageSize
+                    );
+                    break;
+
+                case 'allAvailableLocations':
+                    result = mapControlFunctions.allAvailableLocations(
+                        allJobs,
+                        funcCall.arguments.page,
+                        funcCall.arguments.pageSize
+                    );
+                    break;
+
+                case 'allAvailableTitles':
+                    result = mapControlFunctions.allAvailableTitles(
+                        allJobs,
+                        funcCall.arguments.page,
+                        funcCall.arguments.pageSize
+                    );
+                    break;
+
                 default:
                     result = {
                         success: false,

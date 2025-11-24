@@ -29,3 +29,5 @@ logs/
 **/checkpoint.json
 **/jobs.csv
 **/jobs_diff_*.csv
+
+job-map/public/jobs.csv

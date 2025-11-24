@@ -32,6 +32,11 @@ LOCATION_COORDINATES = {
     "Boston, Massachusetts, United States": (42.3601, -71.0589),
     "Boston, MA, United States": (42.3601, -71.0589),
     "Boston": (42.3601, -71.0589),
+    "Cambridge, Massachusetts, United States": (42.3736, -71.1097),
+    "Cambridge, Massachusetts, US": (42.3736, -71.1097),
+    "Cambridge, MA, United States": (42.3736, -71.1097),
+    "Cambridge, MA": (42.3736, -71.1097),
+    "Cambridge": (42.3736, -71.1097),
     "Denver, Colorado, United States": (39.7392, -104.9903),
     "Denver, CO, United States": (39.7392, -104.9903),
     "Denver": (39.7392, -104.9903),
@@ -50,6 +55,10 @@ LOCATION_COORDINATES = {
     "Dallas, Texas, United States": (32.7767, -96.797),
     "Dallas, TX, United States": (32.7767, -96.797),
     "Dallas": (32.7767, -96.797),
+    "Memphis, Tennessee, United States": (35.1495, -90.049),
+    "Memphis, TN, United States": (35.1495, -90.049),
+    "Memphis, TN": (35.1495, -90.049),
+    "Memphis": (35.1495, -90.049),
     "Phoenix, Arizona, United States": (33.4484, -112.074),
     "Phoenix, AZ, United States": (33.4484, -112.074),
     "Phoenix": (33.4484, -112.074),
@@ -115,6 +124,9 @@ LOCATION_COORDINATES = {
     "Vienna": (48.2082, 16.3738),
     "Zurich, Switzerland": (47.3769, 8.5417),
     "Zurich": (47.3769, 8.5417),
+    "Zürich, Switzerland": (47.3769, 8.5417),
+    "Zürich, CH": (47.3769, 8.5417),
+    "Zürich": (47.3769, 8.5417),
     "Stockholm, Sweden": (59.3293, 18.0686),
     "Stockholm": (59.3293, 18.0686),
     "Copenhagen, Denmark": (55.6761, 12.5683),
@@ -133,6 +145,8 @@ LOCATION_COORDINATES = {
     "Munich": (48.1351, 11.5820),
     "Luxembourg": (49.6116, 6.1319),
     "Luxembourg, Luxembourg": (49.6116, 6.1319),
+    "Budapest, Hungary": (47.4979, 19.0402),
+    "Budapest": (47.4979, 19.0402),
     # Asia-Pacific
     "Singapore, Singapore": (1.3521, 103.8198),
     "Singapore": (1.3521, 103.8198),
@@ -176,6 +190,8 @@ LOCATION_COORDINATES = {
     # Middle East
     "Dubai, United Arab Emirates": (25.2048, 55.2708),
     "Dubai": (25.2048, 55.2708),
+    "Doha, Qatar": (25.2854, 51.5310),
+    "Doha": (25.2854, 51.5310),
     "Tel Aviv, Israel": (32.0853, 34.7818),
     "Tel Aviv": (32.0853, 34.7818),
     # Africa
@@ -246,6 +262,22 @@ LOCATION_COORDINATES = {
     "São Paolo, Brazil": (-23.5505, -46.6333),  # São Paulo (fix typo variant)
     "India - Remote": (28.7041, 77.1025),  # Delhi (center of India)
     "Remote - India": (28.7041, 77.1025),  # Delhi (center of India)
+}
+
+# Map multi-location strings to canonical single-city locations we plot individually.
+MULTI_LOCATION_MAPPINGS = {
+    "SF / NY": [
+        "San Francisco, California, United States",
+        "New York, New York, United States",
+    ],
+    "SF/NY": [
+        "San Francisco, California, United States",
+        "New York, New York, United States",
+    ],
+    "SF / NYC": [
+        "San Francisco, California, United States",
+        "New York, New York, United States",
+    ],
 }
 
 
@@ -336,6 +368,41 @@ def get_coordinates(location: str) -> tuple[float | None, float | None]:
     return None, None
 
 
+def resolve_multi_location_targets(location: str) -> list[str] | None:
+    """
+    Determine if a location string represents multiple map points.
+    Returns canonical location strings when the input should be split.
+    """
+    if pd.isna(location):
+        return None
+
+    location_key = str(location).strip()
+    normalized_key = re.sub(r"\s+", " ", location_key)
+
+    # Explicit mappings (e.g., "SF / NY")
+    targets = MULTI_LOCATION_MAPPINGS.get(location_key) or MULTI_LOCATION_MAPPINGS.get(
+        normalized_key
+    )
+    if targets:
+        return targets
+
+    # Generic support for "City 1 | City 2" patterns
+    if "|" in location_key:
+        pipe_targets: list[str] = []
+        for part in location_key.split("|"):
+            candidate = re.sub(r"\s+", " ", part).strip(" ,;")
+            if not candidate:
+                continue
+            lat, lon = get_coordinates(candidate)
+            if lat is not None and lon is not None:
+                pipe_targets.append(candidate)
+
+        if len(pipe_targets) >= 2:
+            return pipe_targets
+
+    return None
+
+
 def main():
     """Main function to filter jobs to only include specified companies and add coordinates."""
     script_dir = Path(__file__).parent
@@ -366,9 +433,13 @@ def main():
         "stabilityai",
         "midjourney",
         "replicate",
-        "lightning",
         "fal",
         "adept",
+        "xai",
+        "replicate",
+        "anysphere",
+        "cursor",
+        "openrouter",
     }
 
     print(f"Reading jobs from {input_file}...")
@@ -384,11 +455,39 @@ def main():
     print(f"Included {filtered_count} jobs from specified companies")
     print(f"Filtered out {original_count - filtered_count} jobs from other companies")
 
+    # Expand rows with multi-location strings (e.g., "SF / NY") into separate entries
+    # so each map point has a canonical location for coordinate lookups.
+    df_filtered["map_location"] = df_filtered["location"]
+    expanded_rows: list[pd.Series] = []
+    additional_points = 0
+
+    for _, row in df_filtered.iterrows():
+        targets = resolve_multi_location_targets(row["location"])
+
+        if targets:
+            for target in targets:
+                new_row = row.copy()
+                new_row["map_location"] = target
+                expanded_rows.append(new_row)
+            additional_points += len(targets) - 1
+        else:
+            expanded_rows.append(row)
+
+    if expanded_rows:
+        df_filtered = pd.DataFrame(expanded_rows)
+
+    if additional_points > 0:
+        print(
+            f"Expanded multi-location rows (+{additional_points} additional point(s)) "
+            f"to represent each city individually"
+        )
+
     # Add coordinates
     print("Adding coordinates...")
-    coordinates = df_filtered["location"].apply(get_coordinates)
+    coordinates = df_filtered["map_location"].apply(get_coordinates)
     df_filtered["lat"] = [coord[0] for coord in coordinates]
     df_filtered["lon"] = [coord[1] for coord in coordinates]
+    df_filtered = df_filtered.drop(columns=["map_location"])
 
     # Count how many locations were found
     found_coords = df_filtered["lat"].notna().sum()
