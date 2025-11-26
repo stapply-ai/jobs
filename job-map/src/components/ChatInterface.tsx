@@ -27,6 +27,7 @@ const StapplyLogo = ({ size = 36 }: { size?: number }) => (
 interface ChatInterfaceProps {
     aiService: AIService;
     onClose?: () => void;
+    hideButton?: boolean;
 }
 
 interface Message {
@@ -37,13 +38,17 @@ interface Message {
     isLoading?: boolean;
 }
 
-export function ChatInterface({ aiService, onClose }: ChatInterfaceProps) {
+export function ChatInterface({ aiService, onClose, hideButton = false }: ChatInterfaceProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [position, setPosition] = useState({ x: window.innerWidth - 96, y: window.innerHeight - 96 });
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -58,6 +63,48 @@ export function ChatInterface({ aiService, onClose }: ChatInterfaceProps) {
             inputRef.current.focus();
         }
     }, [isOpen]);
+
+    // Dragging logic for button
+    useEffect(() => {
+        if (!isDragging) return;
+
+        const handleMouseMove = (e: MouseEvent) => {
+            setPosition({
+                x: e.clientX - dragOffset.x,
+                y: e.clientY - dragOffset.y,
+            });
+        };
+
+        const handleMouseUp = () => {
+            setIsDragging(false);
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isDragging, dragOffset]);
+
+    const handleMouseDown = (e: React.MouseEvent<HTMLButtonElement>) => {
+        if (buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect();
+            setDragOffset({
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top,
+            });
+            setIsDragging(true);
+            e.preventDefault();
+        }
+    };
+
+    const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+        if (!isDragging) {
+            setIsOpen(true);
+        }
+    };
 
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
@@ -122,18 +169,29 @@ export function ChatInterface({ aiService, onClose }: ChatInterfaceProps) {
     };
 
     if (!isOpen) {
+        if (hideButton) return null;
+
         return (
             <button
-                onClick={() => setIsOpen(true)}
+                ref={buttonRef}
+                onMouseDown={handleMouseDown}
+                onClick={handleClick}
+                style={{
+                    left: `${position.x}px`,
+                    top: `${position.y}px`,
+                }}
                 className={clsx(
-                    'fixed bottom-6 right-6 z-1000',
+                    'fixed z-1000',
                     'w-16 h-16 rounded-full',
-                    'bg-blue-500 border-none cursor-pointer',
-                    'shadow-[0_4px_12px_rgba(59,130,246,0.4)]',
+                    'bg-black/50 backdrop-blur-2xl border border-white/10 cursor-move',
+                    'shadow-[0_4px_12px_rgba(0,0,0,0.4)]',
                     'flex items-center justify-center',
-                    'transition-all duration-200',
+                    'transition-[background-color,border-color,transform] duration-150',
                     'p-0 overflow-hidden',
-                    'hover:scale-110 hover:shadow-[0_6px_16px_rgba(59,130,246,0.6)]'
+                    'hover:bg-black/70 hover:border-white/20 hover:scale-105',
+                    {
+                        'select-none': isDragging,
+                    }
                 )}
             >
                 <StapplyLogo size={40} />

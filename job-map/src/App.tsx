@@ -2,6 +2,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { JobMap } from './components/JobMap';
 import { LoadingScreen } from './components/LoadingScreen';
 import { ChatInterface } from './components/ChatInterface';
+import { FilterDialog, type FilterState } from './components/FilterDialog';
+import { JobListSidebar } from './components/JobListSidebar';
 import { loadJobsWithCoordinates, getLocationStats } from './utils/dataProcessor';
 import type { JobMarker } from './types';
 import { MAPBOX_TOKEN } from './config';
@@ -16,6 +18,8 @@ function App() {
   const [totalJobsCount, setTotalJobsCount] = useState(0);
   const [filteredJobs, setFilteredJobs] = useState<JobMarker[] | null>(null);
   const [viewState, setViewState] = useState<ViewState | null>(null);
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
+  const [isJobListOpen, setIsJobListOpen] = useState(false);
   const aiServiceRef = useRef<AIService>(new AIService());
   const mapControlCallbacksRef = useRef<MapControlCallbacks | null>(null);
 
@@ -52,6 +56,39 @@ function App() {
       aiServiceRef.current.updateJobs(jobMarkers);
     }
   }, [jobMarkers]);
+
+  const handleApplyFilters = useCallback((filters: FilterState) => {
+    let filtered = jobMarkers;
+
+    // Filter by companies
+    if (filters.companies.length > 0) {
+      filtered = filtered.filter(job => filters.companies.includes(job.company));
+    }
+
+    // Filter by locations
+    if (filters.locations.length > 0) {
+      filtered = filtered.filter(job => filters.locations.includes(job.location));
+    }
+
+    // Filter by search text
+    if (filters.searchText.trim()) {
+      const searchLower = filters.searchText.toLowerCase();
+      filtered = filtered.filter(job =>
+        job.title.toLowerCase().includes(searchLower) ||
+        job.company.toLowerCase().includes(searchLower) ||
+        job.location.toLowerCase().includes(searchLower)
+      );
+    }
+
+    setFilteredJobs(filtered.length < jobMarkers.length ? filtered : null);
+  }, [jobMarkers]);
+
+  const handleJobClick = useCallback((job: JobMarker) => {
+    if (mapControlCallbacksRef.current) {
+      // Fly to the job location and zoom in
+      mapControlCallbacksRef.current.flyTo(job.lng, job.lat, 12);
+    }
+  }, []);
 
   useEffect(() => {
     async function loadData() {
@@ -124,12 +161,28 @@ function App() {
         onMapControlReady={handleMapControlReady}
         filteredJobs={filteredJobs}
         onViewStateChange={handleViewStateChange}
+        onOpenFilters={() => setIsFilterDialogOpen(true)}
+        onOpenJobList={() => setIsJobListOpen(true)}
       />
       {showChat && (
         <ChatInterface
           aiService={aiServiceRef.current}
+          hideButton={isJobListOpen}
         />
       )}
+      <FilterDialog
+        isOpen={isFilterDialogOpen}
+        onClose={() => setIsFilterDialogOpen(false)}
+        jobs={jobMarkers}
+        onApplyFilters={handleApplyFilters}
+      />
+      <JobListSidebar
+        jobs={jobMarkers}
+        isOpen={isJobListOpen}
+        onClose={() => setIsJobListOpen(false)}
+        onJobClick={handleJobClick}
+        filteredJobs={filteredJobs}
+      />
     </>
   );
 }

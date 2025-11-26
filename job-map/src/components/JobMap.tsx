@@ -15,6 +15,8 @@ interface JobMapProps {
   onMapControlReady?: (callbacks: MapControlCallbacks) => void;
   filteredJobs?: JobMarker[] | null;
   onViewStateChange?: (viewState: ViewState) => void;
+  onOpenFilters?: () => void;
+  onOpenJobList?: () => void;
 }
 
 interface ClusterMarker {
@@ -90,7 +92,7 @@ function createClusters(jobs: JobMarker[], zoom: number): ClusterMarker[] {
 }
 
 export const JobMap = forwardRef<MapControlCallbacks, JobMapProps>(
-  ({ jobs, mapboxToken, totalJobs, isLoadingMore, loadingProgress, onMapControlReady, filteredJobs, onViewStateChange }, ref) => {
+  ({ jobs, mapboxToken, totalJobs, isLoadingMore, loadingProgress, onMapControlReady, filteredJobs, onViewStateChange, onOpenFilters, onOpenJobList }, ref) => {
     // Calculate initial view state based on jobs if available
     const getInitialViewState = (): ViewState => {
       if (jobs.length > 0) {
@@ -303,6 +305,9 @@ export const JobMap = forwardRef<MapControlCallbacks, JobMapProps>(
           displayedJobs={displayJobs.length}
           totalLocations={uniqueLocations}
           popupOpen={!!popupJob}
+          onOpenFilters={onOpenFilters}
+          onOpenJobList={onOpenJobList}
+          hasActiveFilters={filteredJobs !== null}
         />
 
         {isLoadingMore && loadingProgress && (
