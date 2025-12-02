@@ -358,13 +358,58 @@ def write_dataframe_atomically(df: pd.DataFrame, target_path: str) -> None:
         raise
 
 
+def extract_company_name_from_url(url: str, platform_key: str) -> str:
+    """Extract company name from URL by extracting slug and formatting it"""
+    from urllib.parse import urlparse, unquote
+
+    parsed = urlparse(url)
+    path = parsed.path.lstrip("/")
+
+    if platform_key == "rippling":
+        # https://ats.rippling.com/{slug}/jobs
+        slug = path.split("/")[0] if path else "unknown"
+    elif platform_key == "ashby":
+        # https://jobs.ashbyhq.com/{slug}
+        slug = path
+    elif platform_key == "greenhouse":
+        # https://job-boards.greenhouse.io/{slug}
+        slug = path
+    elif platform_key == "lever":
+        # https://jobs.lever.co/{slug}
+        slug = path
+    elif platform_key == "workable":
+        # https://apply.workable.com/{slug}
+        slug = path
+    elif platform_key == "smartrecruiters":
+        # https://jobs.smartrecruiters.com/{company}/...
+        slug = path.split("/")[0] if path else "unknown"
+    elif platform_key == "workday":
+        # https://{company}.wd*.myworkdayjobs.com/...
+        # Extract company name from subdomain
+        netloc = parsed.netloc.lower()
+        if ".myworkdayjobs.com" in netloc:
+            slug = netloc.split(".")[0]
+        else:
+            slug = "unknown"
+    elif platform_key == "gem":
+        # https://jobs.gem.com/{slug}
+        slug = path.split("/")[0] if path else "unknown"
+    else:
+        slug = path.split("/")[0] if path else "unknown"
+
+    # Format slug as name: replace hyphens with spaces and title case
+    decoded = unquote(slug)
+    spaced = decoded.replace("-", " ").replace("_", " ")
+    return spaced.title()
+
+
 def save_discovered_urls(
     combined_urls: Set[str],
     platform_key: str,
     config: dict,
 ) -> None:
     """
-    Save discovered URLs to CSV file.
+    Save discovered URLs to CSV file with name and url columns.
     Called after each query to preserve progress.
     """
     # Convert normalized URLs back to standardized format for platforms that need it
@@ -392,7 +437,37 @@ def save_discovered_urls(
     else:
         sorted_urls = sorted(combined_urls)
 
-    df = pd.DataFrame({config["csv_column"]: sorted_urls})
+    # Read existing data to preserve names if they exist
+    existing_data = {}
+    if os.path.exists(config["output_file"]):
+        try:
+            df_existing = pd.read_csv(config["output_file"])
+            if "url" in df_existing.columns and "name" in df_existing.columns:
+                for _, row in df_existing.iterrows():
+                    if pd.notna(row.get("url")):
+                        url = row["url"]
+                        # Standardize URL to match the format we'll use as keys
+                        if platform_key == "rippling":
+                            url = standardize_rippling_url(url)
+                        elif platform_key == "gem":
+                            url = standardize_gem_url(url)
+                        elif platform_key == "workday":
+                            url = standardize_workday_url(url)
+                        existing_data[url] = row.get("name", "")
+        except Exception:
+            pass
+
+    # Create DataFrame with name and url columns
+    rows = []
+    for url in sorted_urls:
+        # Use existing name if available, otherwise generate from URL
+        if url in existing_data and existing_data[url]:
+            name = existing_data[url]
+        else:
+            name = extract_company_name_from_url(url, platform_key)
+        rows.append({"name": name, "url": url})
+
+    df = pd.DataFrame(rows)
     write_dataframe_atomically(df, config["output_file"])
     print(f"  💾 Saved {len(df)} companies to {config['output_file']}")
 
@@ -409,10 +484,12 @@ def read_existing_urls(
             read_path = temp_copy or csv_file
             df = pd.read_csv(read_path)
             urls_to_process = []
-            if column_name in df.columns:
-                urls_to_process = df[column_name].dropna().tolist()
-            elif "url" in df.columns:
+            # New format: name,url
+            if "url" in df.columns:
                 urls_to_process = df["url"].dropna().tolist()
+            # Legacy format: specific column name
+            elif column_name in df.columns:
+                urls_to_process = df[column_name].dropna().tolist()
 
             # Standardize platform URLs before normalization
             if platform_key == "rippling":
@@ -430,12 +507,7 @@ def read_existing_urls(
                 normalize_url(url) for url in urls_to_process if normalize_url(url)
             }
 
-            if column_name in df.columns:
-                print(f"📖 Found {len(existing_urls)} existing URLs in {csv_file}")
-            else:
-                print(
-                    f"📖 Found {len(existing_urls)} existing URLs in {csv_file} (legacy format)"
-                )
+            print(f"📖 Found {len(existing_urls)} existing URLs in {csv_file}")
         except Exception as e:
             print(f"⚠️  Error reading {csv_file}: {e}")
         finally:

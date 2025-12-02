@@ -64,14 +64,18 @@ def should_scrape_company(
         return True, None
 
 
-def save_company_data(file_path: str, api_data: dict) -> None:
-    """Save company data with last_scraped timestamp"""
+def save_company_data(file_path: str, api_data: dict, company_name: str = None) -> None:
+    """Save company data with last_scraped timestamp and company name"""
     api_data["last_scraped"] = datetime.now().isoformat()
+    if company_name:
+        api_data["name"] = company_name
     with open(file_path, "w") as f:
         json.dump(api_data, f, indent=2)
 
 
-async def scrape_workable_jobs(company_slug: str, force: bool = False):
+async def scrape_workable_jobs(
+    company_slug: str, force: bool = False, company_name: str = None
+):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     companies_dir = os.path.join(script_dir, "companies")
 
@@ -125,8 +129,8 @@ async def scrape_workable_jobs(company_slug: str, force: bool = False):
                         print(f"Failed to parse JSON for company '{company_slug}': {e}")
                         return None, 0, False
 
-                    # Save with last_scraped timestamp
-                    save_company_data(file_path, data)
+                    # Save with last_scraped timestamp and company name
+                    save_company_data(file_path, data, company_name)
 
                     return data, len(data.get("jobs", [])), True  # True = scraped
             except (
@@ -157,19 +161,26 @@ async def scrape_all_workable_jobs(force: bool = False):
     failed_companies = 0
     skipped_companies = 0
 
+    # Build a mapping from slug to company name
+    slug_to_name = {}
     with open(csv_path, "r") as f:
-        reader = csv.reader(f)
-        next(reader)  # Skip header row
-        companies = [row for row in reader if row]
+        reader = csv.DictReader(f)
+        for row in reader:
+            company_url = row["url"]
+            company_name = row["name"]
+            company_slug = extract_company_slug(company_url)
+            slug_to_name[company_slug] = company_name
 
+    companies = list(slug_to_name.keys())
     print(f"Processing {len(companies)} companies...")
 
-    for row in companies:
-        company_url = row[0]
-        company_slug = extract_company_slug(company_url)
+    for company_slug in companies:
+        company_name = slug_to_name.get(company_slug)
 
         print(f"\nProcessing company: {company_slug}")
-        data, num_jobs, was_scraped = await scrape_workable_jobs(company_slug, force)
+        data, num_jobs, was_scraped = await scrape_workable_jobs(
+            company_slug, force, company_name
+        )
 
         if data is not None:
             count += num_jobs

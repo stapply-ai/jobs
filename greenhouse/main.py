@@ -16,12 +16,14 @@ BASE_RETRY_DELAY = 2  # seconds
 MIN_SCRAPE_DELAY = 1  # seconds
 MAX_SCRAPE_DELAY = 3  # seconds
 
+
 def extract_company_slug(url: str) -> str:
     """Extract company slug from Greenhouse job board URL"""
     parsed = urlparse(url)
     # Extract the path and remove leading slash
     path = parsed.path.lstrip("/")
     return path
+
 
 def load_company_data(file_path: str) -> dict | None:
     """Load company data from JSON file"""
@@ -32,6 +34,7 @@ def load_company_data(file_path: str) -> dict | None:
             return json.load(f)
     except (OSError, json.JSONDecodeError):
         return None
+
 
 def should_scrape_company(
     company_data: dict | None, force: bool = False
@@ -60,11 +63,15 @@ def should_scrape_company(
     except (ValueError, TypeError):
         return True, None
 
-def save_company_data(file_path: str, api_data: dict) -> None:
-    """Save company data with last_scraped timestamp"""
+
+def save_company_data(file_path: str, api_data: dict, company_name: str = None) -> None:
+    """Save company data with last_scraped timestamp and company name"""
     api_data["last_scraped"] = datetime.now().isoformat()
+    if company_name:
+        api_data["name"] = company_name
     with open(file_path, "w") as f:
         json.dump(api_data, f, indent=2)
+
 
 async def try_fetch_jobs(session, url):
     """Helper to fetch jobs from a given greenhouse API URL, returning (data, error, status)"""
@@ -86,7 +93,10 @@ async def try_fetch_jobs(session, url):
     ) as err:
         return None, f"Network exception: {err}", None
 
-async def scrape_greenhouse_jobs(company_slug: str, force: bool = False):
+
+async def scrape_greenhouse_jobs(
+    company_slug: str, force: bool = False, company_name: str = None
+):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     companies_dir = os.path.join(script_dir, "companies")
 
@@ -119,7 +129,7 @@ async def scrape_greenhouse_jobs(company_slug: str, force: bool = False):
 
     urls = [
         f"https://api.greenhouse.io/v1/boards/{company_slug}/jobs?content=true",
-        f"https://boards-api.greenhouse.io/v1/boards/{company_slug}/jobs"
+        f"https://boards-api.greenhouse.io/v1/boards/{company_slug}/jobs",
     ]
 
     print(f"Fetching {urls[0]}...")
@@ -130,33 +140,39 @@ async def scrape_greenhouse_jobs(company_slug: str, force: bool = False):
             # Try first url, fallback to second if fails (404 or >=400)
             data, error, status = await try_fetch_jobs(session, urls[0])
             if data:
-                save_company_data(file_path, data)
+                save_company_data(file_path, data, company_name)
                 return data, len(data.get("jobs", [])), True  # True = scraped
             # If 404, try next url
             if status == 404 or (status is not None and status >= 400):
                 print(f"Primary endpoint failed ({error}), trying alternate endpoint.")
                 data2, error2, status2 = await try_fetch_jobs(session, urls[1])
                 if data2:
-                    save_company_data(file_path, data2)
+                    save_company_data(file_path, data2, company_name)
                     return data2, len(data2.get("jobs", [])), True
                 # if also failed, report which reason to user
                 if status2 == 404:
                     print(f"Company '{company_slug}' not found at both endpoints (404)")
                     return None, 0, False
                 elif status2 is not None:
-                    print(f"Error {status2} for company '{company_slug}' at both endpoints")
+                    print(
+                        f"Error {status2} for company '{company_slug}' at both endpoints"
+                    )
                     return None, 0, False
                 elif error2:
                     print(f"Network error for '{company_slug}': {error2}")
                     if attempt == MAX_RETRIES:
-                        print(f"Exceeded retries for '{company_slug}' due to network error: {error2}")
+                        print(
+                            f"Exceeded retries for '{company_slug}' due to network error: {error2}"
+                        )
                         return None, 0, False
                 else:
                     print(f"Unknown error for '{company_slug}' at both endpoints.")
                     return None, 0, False
             elif error:
                 if attempt == MAX_RETRIES:
-                    print(f"Exceeded retries for '{company_slug}' due to network error: {error}")
+                    print(
+                        f"Exceeded retries for '{company_slug}' due to network error: {error}"
+                    )
                     return None, 0, False
                 delay = BASE_RETRY_DELAY * attempt + random.uniform(0, 1)
                 print(
@@ -173,6 +189,7 @@ async def scrape_greenhouse_jobs(company_slug: str, force: bool = False):
             await asyncio.sleep(delay)
             attempt += 1
 
+
 async def scrape_all_greenhouse_jobs(force: bool = False):
     # Get the directory where this script is located
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -183,19 +200,26 @@ async def scrape_all_greenhouse_jobs(force: bool = False):
     failed_companies = 0
     skipped_companies = 0
 
+    # Build a mapping from slug to company name
+    slug_to_name = {}
     with open(csv_path, "r") as f:
-        reader = csv.reader(f)
-        next(reader)  # Skip header row
-        companies = [row for row in reader if row]
+        reader = csv.DictReader(f)
+        for row in reader:
+            company_url = row["url"]
+            company_name = row["name"]
+            company_slug = extract_company_slug(company_url)
+            slug_to_name[company_slug] = company_name
 
+    companies = list(slug_to_name.keys())
     print(f"Processing {len(companies)} companies...")
 
-    for row in companies:
-        company_url = row[0]
-        company_slug = extract_company_slug(company_url)
+    for company_slug in companies:
+        company_name = slug_to_name.get(company_slug)
 
         print(f"\nProcessing company: {company_slug}")
-        data, num_jobs, was_scraped = await scrape_greenhouse_jobs(company_slug, force)
+        data, num_jobs, was_scraped = await scrape_greenhouse_jobs(
+            company_slug, force, company_name
+        )
 
         if data is not None:
             count += num_jobs
@@ -214,6 +238,7 @@ async def scrape_all_greenhouse_jobs(force: bool = False):
         f"({skipped_companies} skipped, {failed_companies} failed)"
     )
     return script_dir
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Greenhouse job scraper")

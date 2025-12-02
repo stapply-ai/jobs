@@ -6,7 +6,9 @@ from datetime import datetime
 class Department(BaseModel):
     name: Optional[str] = None
     base_department: Optional[str] = Field(alias="base_department", default=None)
-    department_tree: Optional[List[str]] = Field(alias="department_tree", default_factory=list)
+    department_tree: Optional[List[str]] = Field(
+        alias="department_tree", default_factory=list
+    )
 
 
 class EmploymentType(BaseModel):
@@ -42,16 +44,28 @@ class RipplingJob(BaseModel):
     name: Optional[str] = None
     title: Optional[str] = None
     url: Optional[str] = None
-    description: Optional[Dict[str, str]] = None  # Can be dict with "company" and "role" keys
-    work_locations: Optional[List[str]] = Field(alias="workLocations", default_factory=list)
+    description: Optional[Dict[str, str]] = (
+        None  # Can be dict with "company" and "role" keys
+    )
+    work_locations: Optional[List[str]] = Field(
+        alias="workLocations", default_factory=list
+    )
     locations: Optional[List[Location]] = Field(default_factory=list)
     department: Optional[Dict[str, Any]] = None  # Can be dict or Department object
-    employment_type: Optional[Dict[str, Any]] = Field(alias="employmentType", default=None)  # Can be dict or EmploymentType object
+    employment_type: Optional[Dict[str, Any]] = Field(
+        alias="employmentType", default=None
+    )  # Can be dict or EmploymentType object
     created_on: Optional[str] = Field(alias="createdOn", default=None)
     company_name: Optional[str] = Field(alias="companyName", default=None)
-    pay_range_details: Optional[List[Dict[str, Any]]] = Field(alias="payRangeDetails", default_factory=list)
-    eeoc_questionnaire_enabled: Optional[bool] = Field(alias="eeocQuestionnaireEnabled", default=None)
-    eeoc_questionnaire_enabled_for_job_post: Optional[bool] = Field(alias="eeocQuestionnaireEnabledForJobPost", default=None)
+    pay_range_details: Optional[List[Dict[str, Any]]] = Field(
+        alias="payRangeDetails", default_factory=list
+    )
+    eeoc_questionnaire_enabled: Optional[bool] = Field(
+        alias="eeocQuestionnaireEnabled", default=None
+    )
+    eeoc_questionnaire_enabled_for_job_post: Optional[bool] = Field(
+        alias="eeocQuestionnaireEnabledForJobPost", default=None
+    )
 
     class Config:
         populate_by_name = True
@@ -68,8 +82,9 @@ class RipplingJobBoard(BaseModel):
 
 class RipplingCompanyData(BaseModel):
     """Container for all jobs from a Rippling company job board."""
+
     company_slug: str
+    name: Optional[str] = None
     job_board: Optional[RipplingJobBoard] = None
     jobs: List[RipplingJob] = Field(default_factory=list)
     last_scraped: Optional[str] = None
-

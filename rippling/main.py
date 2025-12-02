@@ -920,7 +920,7 @@ def fetch_detailed_job(job_url: str) -> Optional[dict]:
 
 
 def scrape_company_jobs(
-    company_url: str, force: bool = False
+    company_url: str, force: bool = False, company_name: str = None
 ) -> Optional[RipplingCompanyData]:
     """Scrape all detailed jobs for a company."""
     company_slug = extract_company_slug(company_url)
@@ -992,6 +992,7 @@ def scrape_company_jobs(
     # Build company data object
     company_data = RipplingCompanyData(
         company_slug=company_slug,
+        name=company_name,
         job_board=RipplingJobBoard(**job_board_data) if job_board_data else None,
         jobs=[RipplingJob(**job) for job in detailed_jobs],
         last_scraped=datetime.now().isoformat(),
@@ -1005,27 +1006,34 @@ def scrape_company_jobs(
     return company_data
 
 
-def read_company_urls(csv_path: Path) -> list[str]:
+def read_company_urls(csv_path: Path) -> tuple[list[str], dict[str, str]]:
+    """Read company URLs and return a tuple of (urls, slug_to_name mapping)"""
     if not csv_path.exists():
         raise FileNotFoundError(f"Company CSV not found at '{csv_path}'.")
 
+    slug_to_name = {}
+    urls = []
+
     with csv_path.open(encoding="utf-8", newline="") as csv_file:
-        reader = csv.reader(csv_file)
-        rows = [row for row in reader if row]
+        reader = csv.DictReader(csv_file)
+        for row in reader:
+            url = row.get("url", "")
+            name = row.get("name", "")
+            if url:
+                urls.append(url.strip())
+                # Extract slug from URL
+                parsed = urlparse(url)
+                path_parts = [p for p in parsed.path.split("/") if p]
+                if path_parts and path_parts[-1] == "jobs":
+                    slug = path_parts[-2] if len(path_parts) > 1 else path_parts[0]
+                else:
+                    slug = path_parts[0] if path_parts else "unknown"
+                if name:
+                    slug_to_name[slug] = name
 
-    if not rows:
-        raise ValueError(f"No rows found in '{csv_path}'.")
-
-    header, *data = rows
-    if "rippling_url" in header:
-        idx = header.index("rippling_url")
-    else:
-        idx = 0
-
-    urls = [row[idx].strip() for row in data if len(row) > idx and row[idx].strip()]
     if not urls:
         raise ValueError(f"No URLs found in '{csv_path}'.")
-    return urls
+    return urls, slug_to_name
 
 
 def run_html_sample(company_url: str, max_jobs: int) -> list[dict]:
@@ -1049,15 +1057,25 @@ def run_html_sample(company_url: str, max_jobs: int) -> list[dict]:
 
 def process_companies(
     urls: list[str],
+    slug_to_name: dict[str, str],
     max_jobs: int,
     html_sample: bool = False,
     force: bool = False,
 ) -> None:
     for company_url in urls:
+        # Extract slug to get company name
+        parsed = urlparse(company_url)
+        path_parts = [p for p in parsed.path.split("/") if p]
+        if path_parts and path_parts[-1] == "jobs":
+            slug = path_parts[-2] if len(path_parts) > 1 else path_parts[0]
+        else:
+            slug = path_parts[0] if path_parts else "unknown"
+        company_name = slug_to_name.get(slug)
+
         if html_sample:
             run_html_sample(company_url, max_jobs)
         else:
-            scrape_company_jobs(company_url, force=force)
+            scrape_company_jobs(company_url, force=force, company_name=company_name)
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
@@ -1103,14 +1121,18 @@ def main() -> None:
             scrape_company_jobs(args.url, force=args.force)
         return
 
-    urls = read_company_urls(Path(args.csv))
+    urls, slug_to_name = read_company_urls(Path(args.csv))
 
     if args.html_sample:
         run_html_sample(urls[0], args.max_jobs)
         return
 
     process_companies(
-        urls, args.max_jobs, html_sample=args.html_sample, force=args.force
+        urls,
+        slug_to_name,
+        args.max_jobs,
+        html_sample=args.html_sample,
+        force=args.force,
     )
 
 
