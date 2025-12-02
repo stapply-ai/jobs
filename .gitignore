@@ -32,3 +32,6 @@ logs/
 
 job-map/public/jobs.csv
 map
+
+# Cloned Chrome profiles (contains sensitive cookies/data)
+user_data/
