@@ -1,3 +1,5 @@
-list_ds1_raw.txt
+*.txt
+*.csv
 *.html
+
 data/

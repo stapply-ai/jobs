@@ -26,6 +26,70 @@ NEXT_BUTTON_SELECTORS = [
     "button:has-text(\"Next\")",
 ]
 
+CHUNK_CAPTURE_INIT = """
+(() => {
+    const store = [];
+    Object.defineProperty(window, "__dsChunkStore", {
+        value: store,
+        writable: false,
+        configurable: false,
+    });
+
+    const cloneChunk = (chunk) => {
+        try {
+            return JSON.parse(JSON.stringify(chunk));
+        } catch (err) {
+            return null;
+        }
+    };
+
+    const capture = (chunk) => {
+        if (!chunk || !chunk.key || !chunk.data) return;
+        const copy = cloneChunk(chunk);
+        if (copy) {
+            store.push(copy);
+        }
+    };
+
+    const wrapCallback = (fn) => {
+        if (typeof fn !== "function") {
+            return function(chunk) {
+                capture(chunk);
+            };
+        }
+        return function(...args) {
+            capture(args[0]);
+            return fn.apply(this, args);
+        };
+    };
+
+    let activeCallback = wrapCallback(window.AF_initDataCallback);
+    Object.defineProperty(window, "AF_initDataCallback", {
+        configurable: true,
+        get() {
+            return activeCallback;
+        },
+        set(fn) {
+            activeCallback = wrapCallback(fn);
+        },
+    });
+
+    const queue = Array.isArray(window.AF_initDataChunkQueue)
+        ? window.AF_initDataChunkQueue
+        : (window.AF_initDataChunkQueue = []);
+    for (const chunk of queue) {
+        capture(chunk);
+    }
+    const originalPush = queue.push;
+    queue.push = function(...args) {
+        for (const chunk of args) {
+            capture(chunk);
+        }
+        return originalPush.apply(this, args);
+    };
+})();
+"""
+
 
 def _rel_path(path: Path) -> Path:
     try:
@@ -37,6 +101,14 @@ def _rel_path(path: Path) -> Path:
 async def _wait_for_ds_chunk(page, chunk_key: str, timeout_ms: int) -> Any:
     js = """
     (chunkKey) => {
+        const store = globalThis.__dsChunkStore || [];
+        for (const entry of store) {
+            if (entry && entry.key === chunkKey && entry.data && !entry.__consumed) {
+                entry.__consumed = true;
+                return entry;
+            }
+        }
+
         const queue = globalThis.AF_initDataChunkQueue;
         if (Array.isArray(queue)) {
             for (const entry of queue) {
@@ -56,7 +128,7 @@ async def _wait_for_ds_chunk(page, chunk_key: str, timeout_ms: int) -> Any:
         return null;
     }
     """
-    handle = await page.wait_for_function(js, chunk_key, timeout=timeout_ms)
+    handle = await page.wait_for_function(js, arg=chunk_key, timeout=timeout_ms)
     chunk = await handle.json_value()
     if not chunk or "data" not in chunk:
         raise RuntimeError(f"Chunk {chunk_key} did not include data")
@@ -96,6 +168,7 @@ async def fetch_ds1_payloads(
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129 Safari/537.36"
         ))
         page = await context.new_page()
+        await page.add_init_script(CHUNK_CAPTURE_INIT)
         try:
             await page.goto(url, wait_until="networkidle", timeout=timeout_ms)
             while True:
