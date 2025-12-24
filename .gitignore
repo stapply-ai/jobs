@@ -41,3 +41,7 @@ hourly_thread.txt
 daily_thread.txt
 map/**
 .DS_Store
+
+**/*.txt
+**/*.json
+**/*.html
